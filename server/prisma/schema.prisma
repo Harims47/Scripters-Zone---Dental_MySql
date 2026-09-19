@@ -1,0 +1,564 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  role         String
+  staffId      String?  @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  staff        Staff?   @relation(fields: [staffId], references: [id])
+}
+
+model Staff {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String
+  role       String
+  status     String   @default("Active")
+  attendance String   @default("Present")
+  roomNumber String?
+  permissions Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?
+}
+
+model Patient {
+  id        String    @id @default(uuid())
+  name      String
+  phone     String?   @unique
+  age       Int?
+  gender    String?
+  status    String    @default("Active")
+  photoUrl  String?   @db.LongText
+  address   String?   @db.Text
+  email     String?
+  preferredCommunicationChannel CommunicationPreference @default(AUTO)
+  whatsappAvailable             Boolean?
+  whatsappCheckedAt             DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  payments      Payment[]
+  visits        Visit[]
+  treatmentPlan TreatmentPlan?
+  notifications Notification[]
+  matchedHistoricalRecords  HistoricalMigrationRecord[] @relation("MatchedHistoricalPatient")
+  importedHistoricalRecords HistoricalMigrationRecord[] @relation("ImportedHistoricalPatient")
+  reimbursementDocuments    ReimbursementDocument[]
+}
+
+model Appointment {
+  id         String   @id @default(uuid())
+  patientId  String
+  providerId String?
+  date       String
+  time       String
+  type       String
+  status     String   @default("Scheduled")
+  notes      String?  @db.Text
+  photoUrl   String?  @db.LongText
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  visit      Visit?
+}
+
+model Visit {
+  id              String        @id @default(uuid())
+  patientId       String
+  doctorId        String?
+  appointmentId   String?       @unique
+  status          String
+  amountDue       Float         @default(0)
+  consultationFee Float?
+  treatmentFee    Float?
+  medicineCost    Float?
+  reasonForVisit  String?       @db.Text
+  paymentOwner    String        @default("RECEPTION")
+  visitDate       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  consultation    Consultation?
+  dispensing      Dispensing?
+  payments        Payment[]
+  prescription    Prescription?
+  queueEntry      QueueEntry?
+  appointment             Appointment?        @relation(fields: [appointmentId], references: [id])
+  patient                 Patient             @relation(fields: [patientId], references: [id])
+  completedTreatmentItems TreatmentPlanItem[]
+  importedHistoricalRecords HistoricalMigrationRecord[] @relation("ImportedHistoricalVisit")
+
+  @@index([visitDate])
+}
+
+model QueueEntry {
+  id               String   @id @default(uuid())
+  visitId          String   @unique
+  patientId        String
+  assignedDoctorId String?
+  position         Int
+  status           String
+  priority         Boolean  @default(false)
+  arrivalTime      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  visit            Visit    @relation(fields: [visitId], references: [id])
+}
+
+model Consultation {
+  id              String   @id @default(uuid())
+  visitId         String   @unique
+  doctorId        String
+  reasonForVisit  String   @db.Text
+  clinicalNotes   String   @db.Text
+  consultationFee Float
+  treatmentFee    Float?
+  status          String   @default("In Progress")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  visit           Visit    @relation(fields: [visitId], references: [id])
+}
+
+model MedicineCategory {
+  id          String                     @id @default(uuid())
+  name        String                     @unique
+  description String?                    @db.Text
+  status      String                     @default("Active")
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+  medicines   Medicine[]
+  suppliers   SupplierMedicineCategory[]
+}
+
+model Medicine {
+  id                 String              @id @default(uuid())
+  name               String
+  genericName        String?
+  categoryId         String
+  category           MedicineCategory    @relation(fields: [categoryId], references: [id])
+  form               String
+  unit               String
+  stockWarningLevel  Int
+  currentStock       Int                 @default(0)
+  unitPrice          Float
+  status             String              @default("Active")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  dispensingItems    DispensingItem[]
+  prescriptionItems  PrescriptionItem[]
+  purchaseOrderItems PurchaseOrderItem[]
+  stockMovements     StockMovement[]
+}
+
+model Prescription {
+  id         String             @id @default(uuid())
+  visitId    String             @unique
+  doctorId   String
+  status     String             @default("Draft")
+  notes      String             @db.Text
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+  dispensing Dispensing?
+  visit      Visit              @relation(fields: [visitId], references: [id])
+  items      PrescriptionItem[]
+}
+
+model PrescriptionItem {
+  id             String       @id @default(uuid())
+  prescriptionId String
+  medicineId     String
+  quantity       Int
+  dosage         String?
+  frequency      String?
+  duration       String?
+  instructions   String       @db.Text
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  medicine       Medicine     @relation(fields: [medicineId], references: [id])
+  prescription   Prescription @relation(fields: [prescriptionId], references: [id])
+}
+
+model Dispensing {
+  id             String           @id @default(uuid())
+  visitId        String           @unique
+  prescriptionId String           @unique
+  status         String           @default("Pending")
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  prescription   Prescription     @relation(fields: [prescriptionId], references: [id])
+  visit          Visit            @relation(fields: [visitId], references: [id])
+  items          DispensingItem[]
+}
+
+model DispensingItem {
+  id                 String     @id @default(uuid())
+  dispensingId       String
+  medicineId         String
+  prescribedQuantity Int
+  dispensedQuantity  Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  dispensing         Dispensing @relation(fields: [dispensingId], references: [id])
+  medicine           Medicine   @relation(fields: [medicineId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  visitId   String
+  patientId String
+  amount    Float
+  method    String
+  status    String   @default("Pending")
+  notes     String?  @db.Text
+  date      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  patient   Patient  @relation(fields: [patientId], references: [id])
+  visit     Visit    @relation(fields: [visitId], references: [id])
+}
+
+model TreatmentCatalog {
+  id          String              @id @default(uuid())
+  category    String
+  name        String
+  variant     String?
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  planItems   TreatmentPlanItem[]
+}
+
+model TreatmentPlan {
+  id        String              @id @default(uuid())
+  patientId String              @unique
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  patient   Patient             @relation(fields: [patientId], references: [id])
+  items     TreatmentPlanItem[]
+}
+
+model TreatmentPlanItem {
+  id                 String           @id @default(uuid())
+  treatmentPlanId    String
+  treatmentCatalogId String
+  status             String           @default("Planned") // "Planned" | "Completed"
+  notes              String?          @db.Text
+  completedVisitId   String?
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  treatmentPlan      TreatmentPlan    @relation(fields: [treatmentPlanId], references: [id])
+  catalogItem        TreatmentCatalog @relation(fields: [treatmentCatalogId], references: [id])
+  completedVisit     Visit?           @relation(fields: [completedVisitId], references: [id])
+}
+
+model Supplier {
+  id             String                     @id @default(uuid())
+  name           String
+  contactPerson  String?
+  phone          String?
+  email          String?
+  address        String?                    @db.Text
+  status         String                     @default("Active") // "Active" | "Inactive"
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  purchaseOrders PurchaseOrder[]
+  bills          SupplierBill[]
+  categories     SupplierMedicineCategory[]
+}
+
+model SupplierMedicineCategory {
+  id                 String           @id @default(uuid())
+  supplierId         String
+  medicineCategoryId String
+  createdAt          DateTime         @default(now())
+  supplier           Supplier         @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  medicineCategory   MedicineCategory @relation(fields: [medicineCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, medicineCategoryId])
+}
+
+model PurchaseOrder {
+  id          String              @id @default(uuid())
+  orderNumber String              @unique
+  supplierId  String
+  orderDate   DateTime            @default(now())
+  status      String              @default("Draft") // "Draft" | "Ordered" | "Partially Received" | "Received" | "Cancelled"
+  notes       String?             @db.Text
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  supplier    Supplier            @relation(fields: [supplierId], references: [id])
+  items       PurchaseOrderItem[]
+  bills       SupplierBill[]
+}
+
+model PurchaseOrderItem {
+  id               String        @id @default(uuid())
+  purchaseOrderId  String
+  medicineId       String
+  orderedQuantity  Int
+  receivedQuantity Int           @default(0)
+  unitCost         Float         @default(0)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  medicine         Medicine      @relation(fields: [medicineId], references: [id])
+}
+
+model SupplierBill {
+  id              String            @id @default(uuid())
+  supplierId      String
+  purchaseOrderId String?
+  invoiceNumber   String
+  invoiceDate     DateTime          @default(now())
+  amount          Float
+  billImageUrl    String?           @db.Text
+  notes           String?           @db.Text
+  status          String            @default("Unpaid") // "Unpaid" | "Partial" | "Paid" | "Cancelled"
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  supplier        Supplier          @relation(fields: [supplierId], references: [id])
+  purchaseOrder   PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+  payments        SupplierPayment[]
+}
+
+model SupplierPayment {
+  id             String       @id @default(uuid())
+  supplierBillId String
+  amount         Float
+  method         String       // "Cash" | "Bank Transfer" | "UPI"
+  notes          String?      @db.Text
+  date           DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  bill           SupplierBill @relation(fields: [supplierBillId], references: [id], onDelete: Restrict)
+}
+
+model StockMovement {
+  id            String   @id @default(uuid())
+  medicineId    String
+  movementType  String   // "PURCHASE_RECEIPT" | "DISPENSING" | "ADJUSTMENT"
+  quantity      Int      // Positive for additions, negative for deductions
+  balanceAfter  Int      // Running balance for quick auditing
+  referenceType String?  // "PURCHASE_ORDER" | "VISIT" | "MANUAL"
+  referenceId   String?  // PO ID or Visit ID
+  reason        String?  @db.Text // Reason for adjustment / receiving note
+  performedBy   String?  // User/Staff identifier / username
+  createdAt     DateTime @default(now())
+  medicine      Medicine @relation(fields: [medicineId], references: [id])
+}
+
+enum CommunicationPreference {
+  AUTO
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum NotificationChannel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+  RETRYING
+}
+
+enum NotificationType {
+  APPOINTMENT_CONFIRMATION
+  APPOINTMENT_REMINDER
+  PAYMENT_RECEIPT
+  INVOICE
+  PRESCRIPTION
+  PURCHASE_ORDER_SENT
+}
+
+model Notification {
+  id                String                 @id @default(uuid())
+  type              NotificationType
+  channel           NotificationChannel
+  status            NotificationStatus     @default(QUEUED)
+  recipientPhone    String?
+  recipientEmail    String?
+  recipientName     String?
+  patientId         String?
+  entityType        String?                // "APPOINTMENT", "PAYMENT", "VISIT", "PURCHASE_ORDER"
+  entityId          String?
+  idempotencyKey    String?                @unique
+  manualSendKey     String?
+  isManualSend      Boolean                @default(false)
+  sentByUserId      String?
+  paymentOwner      String?                // Security context snapshot: "DOCTOR" | "RECEPTION"
+  templateName      String?
+  payload           Json?                  // Rendered variables, placeholders
+  provider          String?                // "AISENSY" | "MSG91" | "BREVO" | "MOCK"
+  providerMessageId String?
+  providerReference String?                // Client ref sent to provider to correlate uncertain responses
+  attempts          Int                    @default(0)
+  maxAttempts       Int                    @default(3)
+  lastError         String?                @db.Text
+  scheduledAt       DateTime               @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failedAt          DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  patient           Patient?               @relation(fields: [patientId], references: [id])
+
+  @@index([status, scheduledAt])
+  @@index([scheduledAt, status])
+  @@index([patientId])
+  @@index([entityType, entityId])
+}
+
+enum HistoricalBatchStatus {
+  UPLOADED
+  OCR_PROCESSING
+  AWAITING_REVIEW
+  IMPORTING
+  COMPLETED
+  FAILED
+}
+
+enum HistoricalRecordStatus {
+  PENDING_OCR
+  NEEDS_REVIEW
+  APPROVED
+  SKIPPED
+  IMPORTED
+  FAILED
+}
+
+enum DuplicateStatus {
+  UNIQUE
+  EXACT_MATCH
+  PHONE_CONFLICT
+  POSSIBLE_DUPLICATE
+}
+
+enum DuplicateResolution {
+  CREATE_NEW
+  USE_EXISTING
+  SKIP
+}
+
+model HistoricalMigrationBatch {
+  id               String                    @id @default(uuid())
+  name             String
+  status           HistoricalBatchStatus     @default(UPLOADED)
+  totalPages       Int                       @default(0)
+  processedRecords Int                       @default(0)
+  approvedRecords  Int                       @default(0)
+  importedRecords  Int                       @default(0)
+  skippedRecords   Int                       @default(0)
+  failedRecords    Int                       @default(0)
+  createdById      String?
+  errorMessage     String?                   @db.Text
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  records          HistoricalMigrationRecord[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model HistoricalMigrationRecord {
+  id                  String                   @id @default(uuid())
+  batchId             String
+  pageNumber          Int                      @default(1)
+  sourceFileKey       String
+  sourceFileName      String
+  status              HistoricalRecordStatus   @default(PENDING_OCR)
+  rawOcrText          String?                  @db.Text
+  ocrConfidence       Float?
+
+  // Proposed 6 fields from OCR
+  proposedName        String?
+  proposedPhone       String?
+  proposedAge         Int?
+  proposedGender      String?
+  proposedVisitDate   DateTime?
+  proposedReason      String?                  @db.Text
+
+  // Human reviewed 6 fields
+  reviewedName        String?
+  reviewedPhone       String?
+  reviewedAge         Int?
+  reviewedGender      String?
+  reviewedVisitDate   DateTime?
+  reviewedReason      String?                  @db.Text
+
+  // Duplicate handling
+  duplicateStatus     DuplicateStatus?
+  duplicateResolution DuplicateResolution?
+  matchedPatientId    String?
+
+  // Import link
+  importedPatientId   String?
+  importedVisitId     String?
+  importedAt          DateTime?
+  errorMessage        String?                  @db.Text
+
+  createdAt           DateTime                 @default(now())
+  updatedAt           DateTime                 @updatedAt
+
+  batch               HistoricalMigrationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  matchedPatient      Patient?                 @relation("MatchedHistoricalPatient", fields: [matchedPatientId], references: [id], onDelete: SetNull)
+  importedPatient     Patient?                 @relation("ImportedHistoricalPatient", fields: [importedPatientId], references: [id], onDelete: SetNull)
+  importedVisit       Visit?                   @relation("ImportedHistoricalVisit", fields: [importedVisitId], references: [id], onDelete: SetNull)
+
+  @@index([batchId, status])
+  @@index([status])
+}
+
+model ReimbursementDocument {
+  id                    String    @id @default(uuid())
+  documentNumber        String    @unique
+  patientId             String
+  doctorId              String?
+  visitId               String?
+  documentDate          String    // "YYYY-MM-DD"
+  subject               String    @default("Reimbursement of Dental Treatment Expenses")
+  content               String    @db.Text
+  treatmentDescription  String?   @db.Text
+  amount                Float?
+  
+  // Immutable snapshots
+  patientNameSnapshot   String
+  patientAgeSnapshot    Int?
+  patientGenderSnapshot String?
+  patientPhoneSnapshot  String?
+  doctorNameSnapshot    String?
+  doctorRegNoSnapshot   String?
+  clinicNameSnapshot    String?
+  clinicAddressSnapshot String?
+  clinicPhoneSnapshot   String?
+  clinicLogoSnapshot    String?
+  
+  status                String    @default("Issued") // "Issued"
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  patient               Patient   @relation(fields: [patientId], references: [id])
+
+  @@index([patientId])
+  @@index([documentDate])
+  @@index([documentNumber])
+}
+
+
+

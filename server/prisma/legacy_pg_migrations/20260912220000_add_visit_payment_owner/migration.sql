@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Visit" ADD COLUMN "paymentOwner" TEXT NOT NULL DEFAULT 'RECEPTION';
