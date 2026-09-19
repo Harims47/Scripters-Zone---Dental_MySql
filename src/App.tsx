@@ -27,6 +27,7 @@ import { PremiumReferencePage } from './pages/PremiumReferencePage';
 import { useAuth } from './context/AuthContext';
 
 import { Toaster } from 'react-hot-toast';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const RoleBasedRedirect = () => {
   const { currentUser } = useAuth();
@@ -36,6 +37,7 @@ const RoleBasedRedirect = () => {
 
 function App() {
   return (
+    <ErrorBoundary>
     <AuthProvider>
       <ClinicProvider>
         <BrowserRouter>
@@ -76,6 +78,7 @@ function App() {
       <Toaster position="top-right" toastOptions={{ className: 'font-medium' }} />
     </ClinicProvider>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

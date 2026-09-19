@@ -3,8 +3,13 @@ import { prisma } from '../db';
 
 function verifyWebhookToken(req: Request): boolean {
   const secret = process.env.COMMUNICATION_WEBHOOK_SECRET;
+  const isProduction = process.env.NODE_ENV === 'production';
   if (!secret) {
-    return true; // Permissive in development if secret not configured
+    if (isProduction) {
+      console.error('[SECURITY WARNING] COMMUNICATION_WEBHOOK_SECRET is not configured in production. Webhook rejected.');
+      return false; // Fail closed in production
+    }
+    return true; // Permissive in development only
   }
   const token = req.headers['x-webhook-secret'] || req.query.secret;
   return token === secret;

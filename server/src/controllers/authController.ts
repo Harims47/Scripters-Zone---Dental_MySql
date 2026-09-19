@@ -4,8 +4,9 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../db';
 import dotenv from 'dotenv';
 dotenv.config();
+import { ENV } from '../config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_production';
+const JWT_SECRET = ENV.JWT_SECRET;
 
 export const login = async (req: Request, res: Response) => {
   try {
@@ -41,8 +42,8 @@ export const login = async (req: Request, res: Response) => {
     // Set HTTP-only cookie
     res.cookie('token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      secure: ENV.IS_PRODUCTION,
+      sameSite: process.env.COOKIE_SAMESITE === 'none' ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000 // 1 day
     });
 
@@ -64,8 +65,8 @@ export const login = async (req: Request, res: Response) => {
 export const logout = (req: Request, res: Response) => {
   res.clearCookie('token', {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+    secure: ENV.IS_PRODUCTION,
+    sameSite: process.env.COOKIE_SAMESITE === 'none' ? 'none' : 'lax',
   });
   return res.json({ message: 'Logout successful' });
 };

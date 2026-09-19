@@ -759,8 +759,13 @@ export function ReceptionDeskPage() {
     let finalPatientId = selectedExistingPatientId;
 
     if (isNewPatient) {
-      if (!regData.name || !regData.phone) {
-        toast.error("Name and Phone are required");
+      if (!regData.name || !regData.name.trim()) {
+        toast.error("Patient name is required");
+        return;
+      }
+      const cleanedPhone = regData.phone ? regData.phone.replace(/\D/g, '') : '';
+      if (!cleanedPhone || cleanedPhone.length !== 10) {
+        toast.error("Please enter a valid 10-digit phone number");
         return;
       }
 

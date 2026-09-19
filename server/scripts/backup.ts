@@ -19,7 +19,7 @@ const dbHost = parsedUrl.hostname;
 const dbPort = parsedUrl.port || '3306';
 const dbName = parsedUrl.pathname.replace(/^\//, '');
 
-// Locate mysqldump
+// Locate mysqldump (Host binary or Docker container)
 const dumpCandidates = [
   'mysqldump',
   'C:\\Program Files\\MySQL\\MySQL Server 8.0\\bin\\mysqldump.exe',
@@ -27,19 +27,37 @@ const dumpCandidates = [
   'C:\\Program Files\\MariaDB 10.11\\bin\\mysqldump.exe'
 ];
 
+let dumpType: 'host' | 'docker' = 'host';
 let dumpPath = 'mysqldump';
+
 for (const candidate of dumpCandidates) {
   if (candidate === 'mysqldump') {
     try {
       execSync('mysqldump --version', { stdio: 'ignore' });
       dumpPath = 'mysqldump';
+      dumpType = 'host';
       break;
     } catch {
-      // not in path
+      // not in host path
     }
   } else if (fs.existsSync(candidate)) {
     dumpPath = `"${candidate}"`;
+    dumpType = 'host';
     break;
+  }
+}
+
+// Fallback to Docker container if host mysqldump is not installed
+if (dumpType === 'host' && dumpPath === 'mysqldump') {
+  try {
+    execSync('mysqldump --version', { stdio: 'ignore' });
+  } catch {
+    try {
+      execSync('docker exec dentalcore_mysql mysqldump --version', { stdio: 'ignore' });
+      dumpType = 'docker';
+    } catch {
+      console.warn('Warning: Neither host mysqldump nor docker container dentalcore_mysql is available.');
+    }
   }
 }
 
@@ -52,18 +70,35 @@ const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const backupFilename = `dentalcore_mysql_backup_${timestamp}.sql`;
 const backupFilePath = path.join(backupDir, backupFilename);
 
-console.log(`Starting MySQL backup using ${dumpPath}...`);
+console.log(`Starting non-destructive MySQL backup via ${dumpType === 'docker' ? 'docker exec dentalcore_mysql' : dumpPath}...`);
 console.log(`Destination: ${backupFilePath}`);
 
 try {
-  // Execute non-destructive mysqldump
-  const passArg = dbPassword ? `--password="${dbPassword}"` : '';
-  execSync(
-    `${dumpPath} --user="${dbUser}" ${passArg} --host="${dbHost}" --port="${dbPort}" --single-transaction --quick --default-character-set=utf8mb4 --result-file="${backupFilePath}" "${dbName}"`,
-    { stdio: 'inherit' }
-  );
+  if (dumpType === 'docker') {
+    // Docker execution passing MYSQL_PWD via environment without exposing in host ps -ef
+    execSync(
+      `docker exec -e MYSQL_PWD="${dbPassword}" dentalcore_mysql mysqldump --user="${dbUser}" --single-transaction --quick --default-character-set=utf8mb4 "${dbName}" > "${backupFilePath}"`,
+      { stdio: 'inherit', shell: 'powershell.exe' }
+    );
+  } else {
+    // Host execution passing MYSQL_PWD via process environment (NEVER in command line arguments)
+    execSync(
+      `${dumpPath} --user="${dbUser}" --host="${dbHost}" --port="${dbPort}" --single-transaction --quick --default-character-set=utf8mb4 --result-file="${backupFilePath}" "${dbName}"`,
+      {
+        stdio: 'inherit',
+        env: {
+          ...process.env,
+          MYSQL_PWD: dbPassword || '',
+        }
+      }
+    );
+  }
 
   const stats = fs.statSync(backupFilePath);
+  if (stats.size === 0) {
+    throw new Error('Backup produced an empty 0-byte file');
+  }
+
   console.log(`Backup completed successfully!`);
   console.log(`File size: ${(stats.size / 1024).toFixed(2)} KB`);
   console.log(`Location: ${backupFilePath}`);

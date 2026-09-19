@@ -1,13 +1,17 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL !== undefined
+  ? import.meta.env.VITE_API_BASE_URL
+  : (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 export class ApiError extends Error {
   status: number;
   data: any;
+  requestId?: string;
 
-  constructor(status: number, message: string, data?: any) {
+  constructor(status: number, message: string, data?: any, requestId?: string) {
     super(message);
     this.status = status;
     this.data = data;
+    this.requestId = requestId;
     this.name = 'ApiError';
   }
 }
@@ -36,10 +40,12 @@ export const api = {
         data = await response.json();
       }
 
+      const requestId = response.headers.get('x-request-id') || (data as any)?.requestId || undefined;
+
       if (!response.ok) {
         // Return a clean application-level error
         const message = data?.error || response.statusText || 'An unexpected error occurred';
-        throw new ApiError(response.status, message, data);
+        throw new ApiError(response.status, message, data, requestId);
       }
 
       return data as T;

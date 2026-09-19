@@ -8,22 +8,21 @@ import {
   deleteTreatmentPlanItem
 } from '../controllers/treatmentController';
 
-const router = Router({ mergeParams: true });
+// Catalog router mounted at /api/treatments
+const treatmentRoutes = Router();
+treatmentRoutes.use(requireAuth);
+treatmentRoutes.get('/catalog', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getTreatmentCatalog);
 
-router.use(requireAuth);
-
-// Treatment Catalog (Accessible by all clinical staff & receptionist)
-router.get('/catalog', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getTreatmentCatalog);
-
-// Patient Treatment Plan endpoints
-// Note: These will be mounted at /api/patients/:patientId/treatment-plan
+// Dedicated patient treatment plan router mounted at /api/patients
+export const patientTreatmentRouter = Router({ mergeParams: true });
+patientTreatmentRouter.use(requireAuth);
 
 // Receptionist can only view
-router.get('/:patientId/treatment-plan', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getPatientTreatmentPlan);
+patientTreatmentRouter.get('/:patientId/treatment-plan', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getPatientTreatmentPlan);
 
 // Only doctors can modify
-router.post('/:patientId/treatment-plan/items', requireRole('Head Doctor', 'Duty Doctor'), addTreatmentPlanItem);
-router.patch('/:patientId/treatment-plan/items/:itemId', requireRole('Head Doctor', 'Duty Doctor'), updateTreatmentPlanItem);
-router.delete('/:patientId/treatment-plan/items/:itemId', requireRole('Head Doctor', 'Duty Doctor'), deleteTreatmentPlanItem);
+patientTreatmentRouter.post('/:patientId/treatment-plan/items', requireRole('Head Doctor', 'Duty Doctor'), addTreatmentPlanItem);
+patientTreatmentRouter.patch('/:patientId/treatment-plan/items/:itemId', requireRole('Head Doctor', 'Duty Doctor'), updateTreatmentPlanItem);
+patientTreatmentRouter.delete('/:patientId/treatment-plan/items/:itemId', requireRole('Head Doctor', 'Duty Doctor'), deleteTreatmentPlanItem);
 
-export default router;
+export default treatmentRoutes;

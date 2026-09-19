@@ -1,0 +1,34 @@
+[Unit]
+Description=DentalCore Clinical Management Backend API
+Documentation=https://github.com/YourOrg/DentalCore
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=dentalapp
+Group=dentalapp
+WorkingDirectory=/var/www/dentalcore/app/server
+EnvironmentFile=/var/www/dentalcore/app/server/.env
+
+# Production Compiled Execution Entry Point (Node.js on compiled JS)
+ExecStart=/usr/bin/node dist/src/app.js
+
+# Reliability & Crash Recovery
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=15s
+KillMode=mixed
+
+# Security Hardening Directives
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource Limits
+LimitNOFILE=65536
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

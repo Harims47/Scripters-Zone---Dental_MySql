@@ -28,7 +28,10 @@ playwright-report/
 test-results/
 coverage/
 trace_unzip*/
+*.network
+*-trace.*
 
 # Prisma generated
 server/prisma/seed.js
 backups/
+server/logs/

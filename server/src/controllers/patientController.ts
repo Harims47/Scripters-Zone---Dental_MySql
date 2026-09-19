@@ -63,6 +63,15 @@ export const getPatientById = async (req: Request, res: Response, next: NextFunc
 export const createPatient = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = req.body;
+    if (!data.name || !data.name.trim()) {
+      return res.status(400).json({ error: 'Patient name is required' });
+    }
+    if (data.phone) {
+      const cleanPhone = data.phone.replace(/\D/g, '');
+      if (cleanPhone.length !== 10) {
+        return res.status(400).json({ error: 'Phone number must be exactly 10 digits' });
+      }
+    }
     const patient = await prisma.patient.create({
       data: {
         name: data.name,
@@ -93,9 +102,20 @@ export const updatePatient = async (req: Request, res: Response, next: NextFunct
       return res.status(404).json({ error: 'Patient not found' });
     }
 
+    const allowedUpdateData: Record<string, any> = {};
+    if (data.name !== undefined) allowedUpdateData.name = data.name;
+    if (data.phone !== undefined) allowedUpdateData.phone = data.phone;
+    if (data.age !== undefined) allowedUpdateData.age = data.age;
+    if (data.gender !== undefined) allowedUpdateData.gender = data.gender;
+    if (data.address !== undefined) allowedUpdateData.address = data.address;
+    if (data.email !== undefined) allowedUpdateData.email = data.email;
+    if (data.photoUrl !== undefined) allowedUpdateData.photoUrl = data.photoUrl;
+    if (data.status !== undefined) allowedUpdateData.status = data.status;
+    if (data.preferredCommunicationChannel !== undefined) allowedUpdateData.preferredCommunicationChannel = data.preferredCommunicationChannel;
+
     const patient = await prisma.patient.update({
       where: { id },
-      data
+      data: allowedUpdateData,
     });
     return res.json(patient);
   } catch (error) {

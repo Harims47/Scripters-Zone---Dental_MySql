@@ -3,8 +3,9 @@ import jwt from 'jsonwebtoken';
 import { prisma } from '../db';
 import dotenv from 'dotenv';
 dotenv.config();
+import { ENV } from '../config/env';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev_secret_key_change_in_production';
+const JWT_SECRET = ENV.JWT_SECRET;
 
 declare global {
   namespace Express {

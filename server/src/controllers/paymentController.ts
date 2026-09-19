@@ -248,6 +248,23 @@ export const createPayment = async (req: Request, res: Response, next: NextFunct
       },
     }).catch((err) => console.error('[Notification] Failed to queue payment receipt:', err.message));
 
+    // Record non-repudiable business audit event strictly AFTER transaction commits
+    const { recordAuditEvent } = await import('../utils/auditLogger');
+    await recordAuditEvent({
+      action: 'PAYMENT_RECORDED',
+      entityType: 'Payment',
+      entityId: result.payment.id,
+      actorId: req.user?.id,
+      actorRole: req.user?.role,
+      ipAddress: req.ip,
+      metadata: {
+        amount: result.payment.amount,
+        method: result.payment.method,
+        visitId: result.payment.visitId,
+        isPartial: Boolean(req.body.isPartial ?? (result.payment.amount < result.visit.amountDue)),
+      }
+    });
+
     return res.status(201).json(result);
   } catch (error: any) {
     if (error.status) {

@@ -56,8 +56,8 @@ export async function logout(page: Page) {
   }
 
   try {
-    // Sidebar logout button is inside aside
-    const sidebarLogout = page.locator('aside button').filter({ hasText: 'Logout' }).first();
+    // Sidebar logout button is inside aside (either text or icon with title)
+    const sidebarLogout = page.locator('aside button:has-text("Logout"), aside button[title="Logout"]').first();
     if (await sidebarLogout.isVisible({ timeout: 2000 }).catch(() => false)) {
       await sidebarLogout.click({ timeout: 3000 });
     } else {
@@ -79,8 +79,8 @@ export async function logout(page: Page) {
     }
     await page.waitForURL('**/login', { timeout: 5000 });
   } catch {
-    // Fallback: clear cookies and session then navigate to login
-    await page.request.post('/api/auth/logout').catch(() => {});
+    // Fallback: clear browser cookies and session then navigate to login
+    await page.context().clearCookies();
     await page.evaluate(() => {
       try {
         localStorage.clear();

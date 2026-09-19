@@ -560,5 +560,18 @@ model ReimbursementDocument {
   @@index([documentNumber])
 }
 
+model AuditLog {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  action      String
+  entityType  String
+  entityId    String
+  actorId     String?
+  actorRole   String?
+  ipAddress   String?
+  metadata    Json?
 
-
+  @@index([action, timestamp])
+  @@index([entityType, entityId])
+  @@index([actorId])
+}

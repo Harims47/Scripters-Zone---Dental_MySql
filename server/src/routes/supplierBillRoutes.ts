@@ -15,8 +15,8 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get('/', getSupplierBills);
-router.get('/:id', getSupplierBillById);
+router.get('/', requireRole('Head Doctor', 'Duty Doctor'), getSupplierBills);
+router.get('/:id', requireRole('Head Doctor', 'Duty Doctor'), getSupplierBillById);
 
 // Billing creation / cancellation restricted to authorized management
 router.post('/', requireRole('Head Doctor'), validateRequest(createSupplierBillSchema), createSupplierBill);

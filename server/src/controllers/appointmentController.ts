@@ -152,9 +152,18 @@ export const updateAppointment = async (req: Request, res: Response, next: NextF
     // Creating an appointment does NOT create a visit automatically.
     // The instructions say "Do not prematurely implement Visit/Queue creation".
 
+    const allowedUpdateData: Record<string, any> = {};
+    if (data.patientId !== undefined) allowedUpdateData.patientId = data.patientId;
+    if (data.providerId !== undefined) allowedUpdateData.providerId = data.providerId;
+    if (data.date !== undefined) allowedUpdateData.date = data.date;
+    if (data.time !== undefined) allowedUpdateData.time = data.time;
+    if (data.type !== undefined) allowedUpdateData.type = data.type;
+    if (data.status !== undefined) allowedUpdateData.status = data.status;
+    if (data.notes !== undefined) allowedUpdateData.notes = data.notes;
+
     const appointment = await prisma.appointment.update({
       where: { id },
-      data
+      data: allowedUpdateData
     });
     return res.json(appointment);
   } catch (error) {
