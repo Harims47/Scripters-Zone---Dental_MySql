@@ -158,6 +158,7 @@ export const getVisits = async (req: Request, res: Response, next: NextFunction)
     const visits = await prisma.visit.findMany({
       orderBy: { createdAt: 'desc' },
       include: { 
+        patient: true,
         queueEntry: true,
         consultation: true,
         prescription: { include: { items: true } },
@@ -194,6 +195,7 @@ export const getVisitById = async (req: Request, res: Response, next: NextFuncti
     const visit = await prisma.visit.findUnique({
       where: { id },
       include: { 
+        patient: true,
         queueEntry: true,
         consultation: true,
         prescription: { include: { items: true } },
@@ -456,7 +458,16 @@ export const exportVisits = async (req: Request, res: Response, next: NextFuncti
         })
       : rawVisits;
 
-    const flatData: any[] = visits.map(v => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isToday = !date || date === todayStr;
+    const currentTokensOnly = req.query.currentTokensOnly === 'true' || isToday;
+
+    // For current tokens export (today's live queue), filter to visits that have an active queue entry with a token position
+    const targetVisits = currentTokensOnly
+      ? visits.filter(v => v.queueEntry && v.queueEntry.position != null)
+      : visits;
+
+    let flatData: any[] = targetVisits.map(v => {
       let calcStage = 'Waiting';
       const isTransferred = v.reasonForVisit?.startsWith('[Transferred') || v.queueEntry?.status === 'Transferred';
       if (isTransferred) calcStage = 'Next Day';
@@ -499,7 +510,19 @@ export const exportVisits = async (req: Request, res: Response, next: NextFuncti
       };
     });
 
-    if (date) {
+    if (currentTokensOnly) {
+      // Exclude any entry that does not have an active token
+      flatData = flatData.filter(d => d.token && d.token.startsWith('#'));
+      // Sort by token number descending (latest first: #7, #6, #5... #1) matching Reception Desk table
+      flatData.sort((a, b) => {
+        const numA = parseInt(a.token.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.token.replace(/\D/g, ''), 10) || 0;
+        return numB - numA;
+      });
+    }
+
+    // Only append scheduled appointments if exporting a future date
+    if (date && !isToday && !currentTokensOnly) {
       const existingApptIds = new Set(visits.map(v => v.appointmentId).filter(Boolean));
       const futureAppointments = await prisma.appointment.findMany({
         where: {

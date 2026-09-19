@@ -30,6 +30,8 @@ import withReactContent from 'sweetalert2-react-content';
 
 const MySwal = withReactContent(Swal);
 
+const STANDARD_REASONS = ['Routine Checkup', 'Toothache', 'Cleaning', 'Follow-up', 'Emergency', 'Consultation', 'Surgery'];
+
 export function ReceptionDeskPage() {
   const { queue, visits, patients, staff, refreshClinicOperations, startVisit, updateVisit, assignDoctor, appointments, addAppointment, confirmAppointmentArrival, addPatient, updatePatient, prescriptions, dispensings, completeDispensing, recordPayment, medicines, payments, cancelVisit, consultations, transferVisitsToNextDay } = useClinicContext();
 
@@ -297,19 +299,20 @@ export function ReceptionDeskPage() {
     // Default: Today's live queue
     let data = queue.map(q => {
       const v = visits.find(v => v.id === q.visitId);
-      const p = patients.find(p => p.id === q.patientId);
+      const p = patients.find(p => p.id === q.patientId) || (q as any).visit?.patient || (v as any)?.patient;
       const d = doctors.find(doc => doc.id === q.assignedDoctorId);
       const isAppointment = v?.appointmentId != null;
       const isTransferred = v?.reasonForVisit?.startsWith('[Transferred') || q.status === 'Transferred';
 
-      // Translate queue status to receptionist stage
+      // Translate queue status to receptionist stage (case-insensitive)
+      const qStatusLower = (q.status || '').toLowerCase();
       let stage = 'Waiting';
       if (isTransferred) stage = 'Next Day';
-      else if (q.status === 'Waiting') stage = 'Waiting';
-      else if (q.status === 'In Progress' || q.status === 'With Doctor' || q.status === 'Called') stage = 'With Doctor';
-      else if (q.status === 'Completed' && v?.status !== 'COMPLETED') stage = 'Ready at Reception';
-      else if (q.status === 'Dispensing' || q.status === 'Payment' || q.status === 'Ready at Reception') stage = 'Ready at Reception';
-      else if (q.status === 'Cancelled') stage = 'Cancelled';
+      else if (qStatusLower === 'waiting') stage = 'Waiting';
+      else if (qStatusLower === 'in progress' || qStatusLower === 'with doctor' || qStatusLower === 'called') stage = 'With Doctor';
+      else if (qStatusLower === 'completed' && v?.status !== 'COMPLETED') stage = 'Ready at Reception';
+      else if (qStatusLower === 'dispensing' || qStatusLower === 'payment' || qStatusLower === 'ready at reception') stage = 'Ready at Reception';
+      else if (qStatusLower === 'cancelled') stage = 'Cancelled';
       else stage = q.status; // fallback to raw status instead of incorrectly showing Waiting
 
       const isDoctorHandled = v?.paymentOwner === 'DOCTOR';
@@ -329,16 +332,20 @@ export function ReceptionDeskPage() {
         paymentStatus = 'Partial';
       }
 
+      const resolvedPatientId = q.patientId || v?.patientId || p?.id || '';
+      const resolvedPatientName = p?.name || (q as any).visit?.patient?.name || (v as any)?.patient?.name || 'Unknown';
+      const resolvedPatientPhone = p?.phone || (q as any).visit?.patient?.phone || (v as any)?.patient?.phone || '';
+
       return {
         id: q.id,
         visitId: q.visitId,
-        patientId: p?.id,
-        patientName: p?.name || 'Unknown',
-        patientPhone: p?.phone || '',
+        patientId: resolvedPatientId,
+        patientName: resolvedPatientName,
+        patientPhone: resolvedPatientPhone,
         visitType: isAppointment ? 'Appointment' : 'Walk-in',
         token: q.position || '-',
         doctor: d?.name || '-',
-        reasonForVisit: v?.reasonForVisit,
+        reasonForVisit: v?.reasonForVisit || (q as any).visit?.reasonForVisit || (v as any)?.consultation?.reasonForVisit || '',
         stage: stage,
         paymentStatus,
         rawStatus: isTransferred ? 'Transferred' : q.status, // keep raw for action logic
@@ -359,7 +366,7 @@ export function ReceptionDeskPage() {
     });
 
     inactiveVisits.forEach(v => {
-      const p = patients.find(p => p.id === v.patientId);
+      const p = patients.find(p => p.id === v.patientId) || (v as any)?.patient;
       const d = doctors.find(doc => doc.id === v.doctorId);
       const isAppointment = v.appointmentId != null;
       const isTransferred = v.reasonForVisit?.startsWith('[Transferred');
@@ -382,16 +389,20 @@ export function ReceptionDeskPage() {
         paymentStatus = 'Partial';
       }
 
+      const resolvedPatientId = v.patientId || p?.id || '';
+      const resolvedPatientName = p?.name || (v as any)?.patient?.name || 'Unknown';
+      const resolvedPatientPhone = p?.phone || (v as any)?.patient?.phone || '';
+
       data.push({
         id: v.id,
         visitId: v.id,
-        patientId: p?.id,
-        patientName: p?.name || 'Unknown',
-        patientPhone: p?.phone || '',
+        patientId: resolvedPatientId,
+        patientName: resolvedPatientName,
+        patientPhone: resolvedPatientPhone,
         visitType: isAppointment ? 'Appointment' : 'Walk-in',
         token: oldQueueEntry?.position || '-',
         doctor: d?.name || '-',
-        reasonForVisit: v.reasonForVisit,
+        reasonForVisit: v.reasonForVisit || (v as any).consultation?.reasonForVisit || '',
         stage: isTransferred ? 'Next Day' : (v.status === 'CANCELLED' ? 'Cancelled' : 'Completed'),
         paymentStatus,
         rawStatus: isTransferred ? 'Transferred' : (v.status === 'CANCELLED' ? 'Cancelled' : 'Completed'),
@@ -574,19 +585,33 @@ export function ReceptionDeskPage() {
               variant="ghost"
               className="w-8 h-8 text-teal-600 hover:bg-teal-50"
               title="Edit Patient"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.preventDefault(); e.stopPropagation();
-                const patient = patients.find(p => p.id === row.original.patientId);
+                let patient = patients.find(p => p.id === row.original.patientId) || row.original.rawVisit?.patient || (row.original.rawQueue as any)?.visit?.patient;
+                if (!patient && row.original.patientId) {
+                  try {
+                    const res = await api.get<any>(`/api/patients/${row.original.patientId}`);
+                    patient = res?.data || res;
+                  } catch (err) {
+                    console.error('Failed to fetch patient for edit', err);
+                  }
+                }
                 if (patient) {
                   setEditingPatientId(patient.id);
                   setEditingVisitId(row.original.visitId || null);
+                  const reason = row.original.reasonForVisit
+                    || row.original.rawVisit?.reasonForVisit
+                    || (row.original.rawQueue as any)?.visit?.reasonForVisit
+                    || (row.original.rawVisit as any)?.consultation?.reasonForVisit
+                    || consultations.find(c => c.visitId === row.original.visitId)?.reasonForVisit
+                    || '';
                   setRegData({
-                    name: patient.name,
+                    name: patient.name || '',
                     phone: patient.phone || '',
                     age: patient.age != null ? patient.age.toString() : '',
                     gender: patient.gender || '',
                     address: patient.address || '',
-                    reasonForVisit: row.original.reasonForVisit || row.original.rawVisit?.reasonForVisit || 'Routine Checkup',
+                    reasonForVisit: reason,
                     photoUrl: patient.photoUrl || ''
                   });
                   setEditDrawerMode('edit');
@@ -603,19 +628,33 @@ export function ReceptionDeskPage() {
               variant="ghost"
               className="w-8 h-8 text-blue-600 hover:bg-blue-50"
               title="View Patient Details"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.preventDefault(); e.stopPropagation();
-                const patient = patients.find(p => p.id === row.original.patientId);
+                let patient = patients.find(p => p.id === row.original.patientId) || row.original.rawVisit?.patient || (row.original.rawQueue as any)?.visit?.patient;
+                if (!patient && row.original.patientId) {
+                  try {
+                    const res = await api.get<any>(`/api/patients/${row.original.patientId}`);
+                    patient = res?.data || res;
+                  } catch (err) {
+                    console.error('Failed to fetch patient for view', err);
+                  }
+                }
                 if (patient) {
                   setEditingPatientId(patient.id);
                   setEditingVisitId(row.original.visitId || null);
+                  const reason = row.original.reasonForVisit
+                    || row.original.rawVisit?.reasonForVisit
+                    || (row.original.rawQueue as any)?.visit?.reasonForVisit
+                    || (row.original.rawVisit as any)?.consultation?.reasonForVisit
+                    || consultations.find(c => c.visitId === row.original.visitId)?.reasonForVisit
+                    || '';
                   setRegData({
-                    name: patient.name,
+                    name: patient.name || '',
                     phone: patient.phone || '',
                     age: patient.age != null ? patient.age.toString() : '',
                     gender: patient.gender || '',
                     address: patient.address || '',
-                    reasonForVisit: row.original.reasonForVisit || row.original.rawVisit?.reasonForVisit || 'Routine Checkup',
+                    reasonForVisit: reason,
                     photoUrl: patient.photoUrl || ''
                   });
                   setEditDrawerMode('view');
@@ -1250,6 +1289,7 @@ export function ReceptionDeskPage() {
                     if (search) query.set('search', search);
                     if (stageFilter && stageFilter !== 'all') query.set('stage', stageFilter);
                     if (visitTypeFilter && visitTypeFilter !== 'all') query.set('visitType', visitTypeFilter);
+                    query.set('currentTokensOnly', 'true');
                     const ext = format === 'pdf' ? 'pdf' : format === 'xlsx' ? 'xlsx' : 'csv';
                     await api.download(`/api/visits/export?${query.toString()}`, `reception_desk_export_${selectedDate}.${ext}`);
                     toast.success(`Exported ${format.toUpperCase()} successfully`);
@@ -1823,6 +1863,9 @@ export function ReceptionDeskPage() {
                           <SelectValue placeholder="Select Reason for Visit" />
                         </SelectTrigger>
                         <SelectContent>
+                          {regData.reasonForVisit && !STANDARD_REASONS.includes(regData.reasonForVisit) && (
+                            <SelectItem value={regData.reasonForVisit}>{regData.reasonForVisit}</SelectItem>
+                          )}
                           <SelectItem value="Routine Checkup">Routine Checkup</SelectItem>
                           <SelectItem value="Toothache">Toothache</SelectItem>
                           <SelectItem value="Cleaning">Cleaning</SelectItem>
@@ -2019,6 +2062,9 @@ export function ReceptionDeskPage() {
                         <SelectValue placeholder="Select Reason for Visit" />
                       </SelectTrigger>
                       <SelectContent>
+                        {regData.reasonForVisit && !STANDARD_REASONS.includes(regData.reasonForVisit) && (
+                          <SelectItem value={regData.reasonForVisit}>{regData.reasonForVisit}</SelectItem>
+                        )}
                         <SelectItem value="Routine Checkup">Routine Checkup</SelectItem>
                         <SelectItem value="Toothache">Toothache</SelectItem>
                         <SelectItem value="Cleaning">Cleaning</SelectItem>

@@ -10,11 +10,14 @@ export const upsertPrescription = async (req: Request, res: Response, next: Next
       return res.status(403).json({ error: 'Authenticated user is not linked to a staff record' });
     }
 
-    const visit = await prisma.visit.findUnique({ where: { id: visitId }, include: { prescription: true } });
+    const visit = await prisma.visit.findUnique({ 
+      where: { id: visitId }, 
+      include: { prescription: true, queueEntry: true } 
+    });
     if (!visit) return res.status(404).json({ error: 'Visit not found' });
 
-    if (visit.status !== 'WITH_DOCTOR') {
-      return res.status(409).json({ error: 'Visit is not in WITH_DOCTOR state' });
+    if (visit.status !== 'WITH_DOCTOR' && visit.status !== 'WAITING' && visit.status !== 'CALLED') {
+      return res.status(409).json({ error: `Visit is in ${visit.status} state, cannot create prescription` });
     }
 
     // Verify all medicines exist, are Active, and calculate cost
@@ -30,7 +33,7 @@ export const upsertPrescription = async (req: Request, res: Response, next: Next
       let prescriptionId = visit.prescription?.id;
 
       if (visit.prescription) {
-        if (visit.prescription.doctorId !== doctorId) {
+        if (req.user?.role === 'Duty Doctor' && visit.prescription.doctorId !== doctorId) {
           throw { status: 403, message: 'You are not the owner of this prescription' };
         }
         if (visit.prescription.status !== 'Draft') {
@@ -56,6 +59,26 @@ export const upsertPrescription = async (req: Request, res: Response, next: Next
           }
         });
         prescriptionId = newPrescription.id;
+      }
+
+      // Ensure visit is in WITH_DOCTOR state
+      if (visit.status !== 'WITH_DOCTOR') {
+        await tx.visit.update({
+          where: { id: visitId },
+          data: {
+            status: 'WITH_DOCTOR',
+            doctorId: visit.doctorId || doctorId
+          }
+        });
+        if (visit.queueEntry) {
+          await tx.queueEntry.update({
+            where: { id: visit.queueEntry.id },
+            data: {
+              status: 'With Doctor',
+              assignedDoctorId: visit.queueEntry.assignedDoctorId || doctorId
+            }
+          });
+        }
       }
 
       // Create items

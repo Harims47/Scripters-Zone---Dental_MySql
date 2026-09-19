@@ -4,7 +4,7 @@ import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
 import { 
-  UserPlus, CalendarPlus, Clock, Phone, 
+  UserPlus, CalendarPlus, Clock, 
   CheckCircle2, TrendingUp, Calendar, UserCheck, 
   ArrowRight, Stethoscope
 } from "lucide-react"
@@ -134,13 +134,11 @@ export interface WaitingPatientItem {
 
 export function WaitingPatientsTable({ 
   items, 
-  onCall, 
   onAssign,
   onStartConsultation,
   isDoctor = false
 }: { 
   items: WaitingPatientItem[]
-  onCall?: (item: WaitingPatientItem) => void
   onAssign?: (item: WaitingPatientItem) => void
   onStartConsultation?: (item: WaitingPatientItem) => void
   isDoctor?: boolean
@@ -218,16 +216,7 @@ export function WaitingPatientsTable({
                       >
                         Start Consultation
                       </Button>
-                    ) : item.doctorName ? (
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        className="h-7 text-xs border-slate-200 text-slate-700 hover:bg-slate-100"
-                        onClick={() => onCall?.(item)}
-                      >
-                        <Phone className="h-3 w-3 mr-1 text-slate-500" /> Call
-                      </Button>
-                    ) : (
+                    ) : !item.doctorName ? (
                       <Button 
                         size="sm" 
                         variant="outline" 
@@ -236,6 +225,8 @@ export function WaitingPatientsTable({
                       >
                         Assign Doctor
                       </Button>
+                    ) : (
+                      <span className="text-slate-400 text-xs font-medium">—</span>
                     )}
                   </td>
                 </tr>
@@ -297,8 +288,12 @@ export function AppointmentSummary({ items, title }: { items: AppointmentItem[],
                 <div className="min-w-0">
                   <div className="font-semibold text-slate-900 text-sm leading-tight">{item.patientName}</div>
                   <div className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-                    <span>{item.doctorName}</span>
-                    <span className="opacity-30">•</span>
+                    {item.doctorName && (
+                      <>
+                        <span>{item.doctorName}</span>
+                        <span className="opacity-30">•</span>
+                      </>
+                    )}
                     <span className="text-slate-600 font-medium">{item.type}</span>
                   </div>
                 </div>
@@ -426,11 +421,6 @@ export function DoctorStatusWidget({ items }: { items: DoctorAvailabilityItem[] 
               <div>
                 <div className="font-semibold text-slate-900 text-sm flex items-center gap-2">
                   {doc.name}
-                  {doc.roomNumber && (
-                    <span className="text-[10px] font-normal text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
-                      Room {doc.roomNumber}
-                    </span>
-                  )}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
                   {doc.status === 'With Patient' && doc.currentPatient ? (

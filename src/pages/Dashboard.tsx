@@ -92,17 +92,6 @@ export function Dashboard() {
     fetchDashboard()
   }, [fetchDashboard])
 
-  // Handle Call Patient from Reception Desk perspective
-  const handleCallPatient = async (item: WaitingPatientItem) => {
-    try {
-      await api.patch(`/api/queue/${item.id}/transition`, { action: 'CALL_PATIENT' })
-      toast.success(`Patient ${item.patientName} called`)
-      refreshClinicOperations().catch(console.error)
-      await fetchDashboard()
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to call patient')
-    }
-  }
 
   // Handle Start Consultation for Duty Doctor
   const handleStartConsultation = async (visitId: string, patientId: string) => {
@@ -372,7 +361,6 @@ export function Dashboard() {
             <WaitingPatientsTable 
               items={isDutyDoctor ? (dutyDoctorSlice?.myWaitingPatients || []) : (data?.waitingPatients || [])}
               isDoctor={isDutyDoctor}
-              onCall={handleCallPatient}
               onAssign={handleOpenAssignModal}
               onStartConsultation={(item) => handleStartConsultation(item.visitId, item.patientId)}
             />

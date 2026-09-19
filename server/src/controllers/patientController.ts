@@ -4,7 +4,7 @@ import { prisma } from '../db';
 export const getPatients = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = req.query.limit === 'all' ? 1000 : (parseInt(req.query.limit as string) || 50);
     const search = req.query.search as string;
     const gender = req.query.gender as string;
     const skip = (page - 1) * limit;

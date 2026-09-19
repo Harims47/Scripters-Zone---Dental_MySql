@@ -61,7 +61,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     if (isAuthenticated) {
-      api.get<Patient[]>('/api/patients').then(res => setPatients((res as any).data || res)).catch(console.error)
+      api.get<Patient[]>('/api/patients?limit=500').then(res => setPatients((res as any).data || res)).catch(console.error)
       api.get<Appointment[]>('/api/appointments').then(res => setAppointments((res as any).data || res)).catch(console.error)
       api.get<any[]>('/api/visits').then(res => {
         const visitsData = (res as any).data || res;
@@ -132,19 +132,24 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
 
   const refreshClinicOperations = React.useCallback(async () => {
     try {
-      const [queueRes, visitsRes, staffRes] = await Promise.all([
+      const [queueRes, visitsRes, staffRes, patientsRes] = await Promise.all([
         api.get<QueueEntry[]>('/api/queue'),
         api.get<any[]>('/api/visits'),
-        api.get<any>('/api/staff?limit=100')
+        api.get<any>('/api/staff?limit=100'),
+        api.get<any>('/api/patients?limit=500')
       ])
       
       const newQueue = (queueRes as any).data || queueRes || []
       const newVisits = (visitsRes as any).data || visitsRes || []
       const newStaff = (staffRes as any).data?.data || (staffRes as any).data || staffRes || []
+      const newPatients = (patientsRes as any).data?.data || (patientsRes as any).data || patientsRes || []
 
       setQueue(newQueue)
       setVisits(newVisits)
       setStaff(newStaff)
+      if (Array.isArray(newPatients) && newPatients.length > 0) {
+        setPatients(newPatients)
+      }
 
       const allConsultations: Consultation[] = []
       const allPrescriptions: Prescription[] = []
@@ -449,22 +454,22 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
           return [...prev, savedConsultation]
         })
 
-        if (data.consultationFee !== undefined || data.treatmentFee !== undefined) {
-          setVisits(prev => prev.map(v => {
-            if (v.id === visitId) {
-              const consultationFee = data.consultationFee !== undefined ? data.consultationFee : (v.consultationFee || 0);
-              const treatmentFee = data.treatmentFee !== undefined ? data.treatmentFee : (v.treatmentFee || 0);
-              const medicineCost = v.medicineCost || 0;
-              return {
-                ...v,
-                consultationFee,
-                treatmentFee,
-                amountDue: consultationFee + treatmentFee + medicineCost
-              };
-            }
-            return v;
-          }));
-        }
+        setVisits(prev => prev.map(v => {
+          if (v.id === visitId) {
+            const consultationFee = data.consultationFee !== undefined ? data.consultationFee : (v.consultationFee || 0);
+            const treatmentFee = data.treatmentFee !== undefined ? data.treatmentFee : (v.treatmentFee || 0);
+            const medicineCost = v.medicineCost || 0;
+            return {
+              ...v,
+              status: 'WITH_DOCTOR',
+              consultationFee,
+              treatmentFee,
+              amountDue: consultationFee + treatmentFee + medicineCost
+            };
+          }
+          return v;
+        }));
+        setQueue(prev => prev.map(q => q.visitId === visitId ? { ...q, status: 'With Doctor' } : q));
 
         return { success: true }
       }
@@ -487,6 +492,10 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
         }
         return [...prev, savedPrescription]
       })
+      if (prescriptionData.visitId) {
+        setVisits(prev => prev.map(v => v.id === prescriptionData.visitId ? { ...v, status: 'WITH_DOCTOR' } : v));
+        setQueue(prev => prev.map(q => q.visitId === prescriptionData.visitId ? { ...q, status: 'With Doctor' } : q));
+      }
       return { success: true }
     } catch (err: any) {
       console.error(err)

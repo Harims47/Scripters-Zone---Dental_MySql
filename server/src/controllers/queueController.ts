@@ -301,14 +301,14 @@ export const assignDoctor = async (req: Request, res: Response, next: NextFuncti
       // Update both Visit and QueueEntry
       await tx.visit.update({
         where: { id: queueEntry.visitId },
-        data: { doctorId, status: 'WITH_DOCTOR' }
+        data: { doctorId }
       });
 
       const updatedQueue = await tx.queueEntry.update({
         where: { id },
         data: {
           assignedDoctorId: doctorId,
-          status: queueEntry.status === 'Waiting' ? 'In Progress' : 'Transferred'
+          status: 'Waiting'
         },
         include: { visit: true }
       });

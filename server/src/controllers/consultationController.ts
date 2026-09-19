@@ -23,11 +23,14 @@ export const createConsultation = async (req: Request, res: Response, next: Next
       return res.status(403).json({ error: 'Authenticated user is not linked to a staff record' });
     }
 
-    const visit = await prisma.visit.findUnique({ where: { id: visitId } });
+    const visit = await prisma.visit.findUnique({ 
+      where: { id: visitId },
+      include: { queueEntry: true }
+    });
     if (!visit) return res.status(404).json({ error: 'Visit not found' });
 
-    if (visit.status !== 'WITH_DOCTOR') {
-      return res.status(409).json({ error: 'Visit is not in WITH_DOCTOR state' });
+    if (visit.status !== 'WITH_DOCTOR' && visit.status !== 'WAITING' && visit.status !== 'CALLED') {
+      return res.status(409).json({ error: `Visit is in ${visit.status} state, cannot create consultation` });
     }
 
     if (consultationFee !== undefined && consultationFee < 0) {
@@ -56,15 +59,28 @@ export const createConsultation = async (req: Request, res: Response, next: Next
         }
       });
 
-      // Link to Visit
+      // Link to Visit and ensure status is WITH_DOCTOR
       await tx.visit.update({
         where: { id: visitId },
         data: { 
+          status: 'WITH_DOCTOR',
+          doctorId: visit.doctorId || doctorId,
           consultationFee: consultationFee || 0,
           treatmentFee: treatmentFee || 0,
           amountDue: (consultationFee || 0) + (treatmentFee || 0) + (visit.medicineCost || 0)
         }
       });
+
+      // Synchronize Queue Entry if present
+      if (visit.queueEntry) {
+        await tx.queueEntry.update({
+          where: { id: visit.queueEntry.id },
+          data: {
+            status: 'With Doctor',
+            assignedDoctorId: visit.queueEntry.assignedDoctorId || doctorId
+          }
+        });
+      }
 
       return consultation;
     });
@@ -84,7 +100,7 @@ export const updateConsultation = async (req: Request, res: Response, next: Next
     const existing = await prisma.consultation.findUnique({ where: { id }, include: { visit: true } });
     if (!existing) return res.status(404).json({ error: 'Consultation not found' });
 
-    if (existing.doctorId !== doctorId) {
+    if (req.user?.role === 'Duty Doctor' && existing.doctorId !== doctorId) {
       return res.status(403).json({ error: 'You are not the owner of this consultation' });
     }
 
@@ -140,8 +156,8 @@ export const completeConsultation = async (req: Request, res: Response, next: Ne
 
     if (!visit) return res.status(404).json({ error: 'Visit not found' });
 
-    if (visit.status !== 'WITH_DOCTOR') {
-      return res.status(409).json({ error: 'Visit is not in WITH_DOCTOR state' });
+    if (visit.status !== 'WITH_DOCTOR' && visit.status !== 'WAITING' && visit.status !== 'CALLED') {
+      return res.status(409).json({ error: `Visit is in ${visit.status} state, cannot complete consultation` });
     }
 
     if (!visit.consultation) {

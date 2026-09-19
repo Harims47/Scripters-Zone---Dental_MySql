@@ -254,7 +254,7 @@ export const getDashboardData = async (req: Request, res: Response, next: NextFu
         type: a.type,
         status: a.status,
         providerId: a.providerId || null,
-        doctorName: doc ? doc.name : (a.providerId || 'Any Available')
+        doctorName: doc ? doc.name : null
       };
     });
 

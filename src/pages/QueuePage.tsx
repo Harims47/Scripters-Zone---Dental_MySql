@@ -26,7 +26,7 @@ type QueueRow = {
 }
 
 export function QueuePage() {
-  const { queue, patients, visits, consultations, appointments } = useClinicContext()
+  const { queue, patients, visits, consultations, appointments, refreshClinicOperations } = useClinicContext()
   const { currentUser } = useAuth()
   const canManageClinical = currentUser ? canAccessRoute(currentUser.role, '/doctor') : false
   const [search, setSearch] = useState('')
@@ -68,6 +68,12 @@ export function QueuePage() {
     if (!row) return;
 
     if (action === 'Start') {
+      try {
+        await api.patch(`/api/queue/${row.id}/transition`, { action: 'START_CONSULTATION' })
+        refreshClinicOperations().catch(console.error)
+      } catch (err) {
+        console.warn('Queue transition error on start:', err)
+      }
       navigate(`/doctor/patient/${row.patientId}?visitId=${row.visitId}`)
     }
   }
@@ -76,7 +82,7 @@ export function QueuePage() {
     return queueRows.filter(q => {
       // Doctors only see their own assigned patients
       if (canManageClinical && currentUser?.staffId) {
-        if (q.assignedDoctorId !== currentUser.staffId) return false
+        if (!q.assignedDoctorId || q.assignedDoctorId !== currentUser.staffId) return false
       }
 
       // Visit Type Filter (Walk-in vs Appointment)
@@ -150,7 +156,7 @@ export function QueuePage() {
         const item = row.original;
         let actionButton = null;
         if (canManageClinical) {
-          if (item.status === 'Called' || item.status === 'With Doctor' || item.status === 'Waiting' || item.status === 'In Progress' || item.status === 'Transferred') {
+          if (item.assignedDoctorId && (item.status === 'Called' || item.status === 'With Doctor' || item.status === 'Waiting' || item.status === 'In Progress' || item.status === 'Transferred')) {
             const hasConsultation = consultations.some(c => c.visitId === item.visitId);
             const isResuming = item.status === 'With Doctor' || item.status === 'Transferred' || hasConsultation;
             actionButton = (
