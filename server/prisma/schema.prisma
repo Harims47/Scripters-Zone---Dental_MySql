@@ -248,6 +248,7 @@ model TreatmentPlanItem {
   id                 String           @id @default(uuid())
   treatmentPlanId    String
   treatmentCatalogId String
+  toothNumber        Int?             // FDI tooth number (11-18, 21-28, 31-38, 41-48)
   status             String           @default("Planned") // "Planned" | "Completed"
   notes              String?          @db.Text
   completedVisitId   String?
@@ -257,6 +258,8 @@ model TreatmentPlanItem {
   treatmentPlan      TreatmentPlan    @relation(fields: [treatmentPlanId], references: [id])
   catalogItem        TreatmentCatalog @relation(fields: [treatmentCatalogId], references: [id])
   completedVisit     Visit?           @relation(fields: [completedVisitId], references: [id])
+
+  @@index([toothNumber])
 }
 
 model Supplier {

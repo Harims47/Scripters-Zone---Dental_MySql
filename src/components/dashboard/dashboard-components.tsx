@@ -3,21 +3,21 @@ import { useState, useEffect } from "react"
 import { cn } from "../../lib/utils"
 import { Button } from "../ui/button"
 import { Badge } from "../ui/badge"
-import { 
-  UserPlus, CalendarPlus, Clock, 
-  CheckCircle2, TrendingUp, Calendar, UserCheck, 
+import {
+  UserPlus, CalendarPlus, Clock,
+  CheckCircle2, TrendingUp, Calendar, UserCheck,
   ArrowRight, Stethoscope
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
 
 // --- HEADER ---
-export function DashboardHeader({ 
-  greetingOverride, 
-  onRegisterClick 
-}: { 
+export function DashboardHeader({
+  greetingOverride,
+  onRegisterClick
+}: {
   greetingOverride?: string
-  onRegisterClick?: () => void 
+  onRegisterClick?: () => void
 }) {
   const [currentDate, setCurrentDate] = useState('')
   const navigate = useNavigate()
@@ -40,13 +40,13 @@ export function DashboardHeader({
           {currentDate}
         </p>
       </div>
-      
+
       {/* Quick Actions */}
       <div className="flex items-center gap-3">
         {role === 'Head Doctor' && (
-          <Button 
-            onClick={() => navigate('/reception-desk')} 
-            variant="outline" 
+          <Button
+            onClick={() => navigate('/reception-desk')}
+            variant="outline"
             className="gap-2 text-slate-700 bg-white shadow-sm border-slate-200 hover:bg-slate-50"
           >
             <Calendar className="w-4 h-4 text-primary" />
@@ -54,8 +54,8 @@ export function DashboardHeader({
           </Button>
         )}
         {role !== 'Duty Doctor' && (
-          <Button 
-            onClick={() => onRegisterClick ? onRegisterClick() : navigate('/reception-desk', { state: { openRegister: true } })} 
+          <Button
+            onClick={() => onRegisterClick ? onRegisterClick() : navigate('/reception-desk', { state: { openRegister: true } })}
             className="gap-2 shadow-sm transition-all duration-200"
           >
             <UserPlus className="w-4 h-4" />
@@ -80,7 +80,7 @@ export function KpiCard({
 }: {
   title: string
   value: string | number
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   trend?: string
   trendLabel?: string
   colorClass?: string
@@ -88,7 +88,7 @@ export function KpiCard({
   onClick?: () => void
 }) {
   return (
-    <div 
+    <div
       onClick={onClick}
       className={cn(
         "bg-white rounded-2xl border border-slate-100/80 p-5 shadow-[0_2px_12px_-4px_rgba(15,23,42,0.04)] flex flex-col h-full relative group overflow-hidden transition-all duration-200",
@@ -132,12 +132,12 @@ export interface WaitingPatientItem {
   doctorName: string | null
 }
 
-export function WaitingPatientsTable({ 
-  items, 
+export function WaitingPatientsTable({
+  items,
   onAssign,
   onStartConsultation,
   isDoctor = false
-}: { 
+}: {
   items: WaitingPatientItem[]
   onAssign?: (item: WaitingPatientItem) => void
   onStartConsultation?: (item: WaitingPatientItem) => void
@@ -209,17 +209,17 @@ export function WaitingPatientsTable({
                   </td>
                   <td className="px-4 py-3.5 text-right">
                     {isDoctor ? (
-                      <Button 
-                        size="sm" 
+                      <Button
+                        size="sm"
                         className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700 text-white"
                         onClick={() => onStartConsultation?.(item)}
                       >
                         Start Consultation
                       </Button>
                     ) : !item.doctorName ? (
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
+                      <Button
+                        size="sm"
+                        variant="outline"
                         className="h-7 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50"
                         onClick={() => onAssign?.(item)}
                       >
@@ -237,9 +237,9 @@ export function WaitingPatientsTable({
       </div>
 
       <div className="p-3 border-t border-slate-100 bg-slate-50/40 flex justify-end">
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => navigate('/reception-desk')}
           className="text-xs text-primary font-medium hover:bg-primary/5 gap-1"
         >
@@ -344,9 +344,9 @@ export function ReadyForReceptionWidget({ items }: { items: ReadyForReceptionIte
                 <div className="font-semibold text-slate-900 text-sm">{item.patientName}</div>
                 <div className="text-xs text-slate-500">₹{item.amountDue.toLocaleString()} due</div>
               </div>
-              <Button 
-                size="sm" 
-                variant="outline" 
+              <Button
+                size="sm"
+                variant="outline"
                 className="h-7 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50 font-medium"
                 onClick={() => navigate('/reception-desk')}
               >

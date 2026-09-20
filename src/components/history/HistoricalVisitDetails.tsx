@@ -106,7 +106,14 @@ export function HistoricalVisitDetails({ visitId, onViewHistory }: { visitId: st
                         <div className="flex items-start gap-3">
                           <Check className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
                           <div>
-                            <span className="font-semibold text-slate-900">{item.catalogItem?.name} {item.catalogItem?.variant ? `(${item.catalogItem.variant})` : ''}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {item.toothNumber && (
+                                <span className="text-xs bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                                  Tooth {item.toothNumber}
+                                </span>
+                              )}
+                              <span className="font-semibold text-slate-900">{item.catalogItem?.name} {item.catalogItem?.variant ? `(${item.catalogItem.variant})` : ''}</span>
+                            </div>
                             {item.notes && <p className="text-slate-500 mt-1">{item.notes}</p>}
                           </div>
                         </div>

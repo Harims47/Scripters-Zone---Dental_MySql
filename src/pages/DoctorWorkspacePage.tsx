@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Search, Info, Edit, Eye, FileText, Pill, Plus, Minus, Trash2, GripVertical, Printer, History, Clock, CreditCard } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Search, Info, Edit, Eye, FileText, Pill, Plus, Minus, Trash2, GripVertical, Printer, History, Clock, CreditCard, AlertCircle } from 'lucide-react'
 import { DndContext, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
 
@@ -261,10 +261,7 @@ function RxRow({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {/* Quantity */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Qty</label>
-            <span className="text-[10px] text-slate-400 font-medium">auto-calc</span>
-          </div>
+          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Qty</label>
           <div className="flex items-center border rounded-md overflow-hidden bg-slate-50">
             <button className="px-2 py-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors" onClick={() => onUpdateField(item.id, 'quantity', Math.max(1, item.quantity - 1))}><Minus className="h-3 w-3" /></button>
             <input
@@ -376,13 +373,23 @@ export function DoctorWorkspacePage() {
   const { visits, patients, consultations, prescriptions, medicines, saveConsultation, savePrescription, recordPayment, payments, queue, staff, assignDoctor, refreshClinicOperations } = useClinicContext()
 
   // Canonical Entities
-  const visit = visits.find(v => v.id === visitId)
-  const patient = patients.find(p => p.id === (visit ? visit.patientId : patientId))
-  const consultation = consultations.find(c => c.visitId === visitId)
-  const prescription = prescriptions.find(p => p.visitId === visitId)
+  const patient = patients.find(p => p.id === patientId)
+  const matchedVisit = visits.find(v => v.id === visitId) || visits.filter(v => v.patientId === patientId).sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())[0]
+  const visit = matchedVisit || (patient ? ({
+    id: 'active-' + patient.id,
+    patientId: patient.id,
+    status: 'IN_PROGRESS',
+    reasonForVisit: 'General Dental Examination',
+    createdAt: new Date().toISOString(),
+    amountDue: 0
+  } as any) : undefined)
+  const effectiveVisitId = visitId || visit?.id
+  const consultation = consultations.find(c => c.visitId === effectiveVisitId)
+  const prescription = prescriptions.find(p => p.visitId === effectiveVisitId)
   const visitDoctor = staff.find(s => s.id === visit?.doctorId)
 
   const [treatmentModalOpen, setTreatmentModalOpen] = useState(false)
+  const [treatmentModalInitialEdit, setTreatmentModalInitialEdit] = useState(false)
   const [viewTreatmentModalOpen, setViewTreatmentModalOpen] = useState(false)
   const [consultationModalOpen, setConsultationModalOpen] = useState(false)
   const [viewConsultationModalOpen, setViewConsultationModalOpen] = useState(false)
@@ -406,7 +413,10 @@ export function DoctorWorkspacePage() {
   const [reason, setReason] = useState(visit?.reasonForVisit || '')
   const [notes, setNotes] = useState('')
   const [consultationFee, setConsultationFee] = useState<number>(500)
+  const [consultationZeroReason, setConsultationZeroReason] = useState<string>('')
+  const [consultationZeroError, setConsultationZeroError] = useState<string>('')
   const [treatmentFee, setTreatmentFee] = useState<number>(0)
+  const [treatmentZeroReason, setTreatmentZeroReason] = useState<string>('')
 
   // Prescription State
   const [activePrescription, setActivePrescription] = useState<PrescriptionLineItem[]>([])
@@ -439,15 +449,30 @@ export function DoctorWorkspacePage() {
     if (consultation) {
       setReason(consultation.reasonForVisit)
       setNotes(consultation.clinicalNotes)
-      if (consultation.consultationFee !== undefined) setConsultationFee(consultation.consultationFee)
-      if ((consultation as any).treatmentFee !== undefined) setTreatmentFee((consultation as any).treatmentFee)
-    } else if (visit?.reasonForVisit) {
-      setReason(visit.reasonForVisit)
-      setTreatmentFee(0) // Fresh visit starts with zero treatment fee
+      if (consultation.consultationFee !== undefined && consultation.consultationFee !== null) setConsultationFee(consultation.consultationFee)
+      if ((consultation as any).treatmentFee !== undefined && (consultation as any).treatmentFee !== null) {
+        setTreatmentFee((consultation as any).treatmentFee)
+      } else if ((visit as any)?.treatmentFee !== undefined && (visit as any)?.treatmentFee !== null) {
+        setTreatmentFee((visit as any).treatmentFee)
+      }
+
+      // Extract existing waiver reasons if present in clinicalNotes
+      const consultMatch = consultation.clinicalNotes?.match(/\[Consultation Fee Waiver Reason:\s*([^\]]+)\]/i);
+      if (consultMatch) setConsultationZeroReason(consultMatch[1].trim());
+
+      const treatMatch = consultation.clinicalNotes?.match(/\[Treatment Fee Waiver Reason:\s*([^\]]+)\]/i);
+      if (treatMatch) setTreatmentZeroReason(treatMatch[1].trim());
+    } else if (visit) {
+      if (visit.reasonForVisit) setReason(visit.reasonForVisit)
+      if ((visit as any).treatmentFee !== undefined && (visit as any).treatmentFee !== null) {
+        setTreatmentFee((visit as any).treatmentFee)
+      } else {
+        setTreatmentFee(0)
+      }
     } else {
       setTreatmentFee(0)
     }
-  }, [consultation, visit?.reasonForVisit])
+  }, [consultation, visit?.reasonForVisit, (visit as any)?.treatmentFee])
 
   const calculatedMedicineCost = useMemo(() => {
     const rxItems = (prescription?.items && prescription.items.length > 0) ? prescription.items : activePrescription;
@@ -545,16 +570,33 @@ export function DoctorWorkspacePage() {
 
   // --- Handlers ---
   const handleSaveConsultation = async () => {
+    if (consultationFee === 0 && !consultationZeroReason.trim()) {
+      setConsultationZeroError('Please provide a reason for ₹0 consultation fee.');
+      return;
+    }
+
     if (visitId) {
+      let updatedNotes = notes;
+      updatedNotes = updatedNotes.replace(/\n?\[Consultation Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+      if (consultationFee === 0 && consultationZeroReason.trim()) {
+        updatedNotes = `${updatedNotes}\n[Consultation Fee Waiver Reason: ${consultationZeroReason.trim()}]`.trim();
+        setNotes(updatedNotes);
+      }
+      if (treatmentFee === 0 && treatmentZeroReason.trim()) {
+        updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+        updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${treatmentZeroReason.trim()}]`.trim();
+        setNotes(updatedNotes);
+      }
+
       await saveConsultation(visitId, {
         reasonForVisit: reason,
-        clinicalNotes: notes,
+        clinicalNotes: updatedNotes,
         consultationFee,
         treatmentFee: treatmentFee as any
-      })
-      setConsultationModalOpen(false)
+      });
+      setConsultationModalOpen(false);
     }
-  }
+  };
 
   const handleSavePrescription = async () => {
     if (!visitId || activePrescription.length === 0) {
@@ -591,12 +633,35 @@ export function DoctorWorkspacePage() {
 
   const handleComplete = async () => {
     if (visitId) {
+      if (consultationFee === 0 && !consultationZeroReason.trim()) {
+        setConsultationZeroError('Please provide a reason for ₹0 consultation fee.');
+        setConsultationModalOpen(true);
+        return;
+      }
+      if (treatmentFee === 0 && currentVisitTreatments.length > 0 && !treatmentZeroReason.trim()) {
+        setTreatmentModalInitialEdit(false);
+        setTreatmentModalOpen(true);
+        return;
+      }
+
       try {
+        let updatedNotes = notes;
+        if (consultationFee === 0 && consultationZeroReason.trim()) {
+          updatedNotes = updatedNotes.replace(/\n?\[Consultation Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+          updatedNotes = `${updatedNotes}\n[Consultation Fee Waiver Reason: ${consultationZeroReason.trim()}]`.trim();
+          setNotes(updatedNotes);
+        }
+        if (treatmentFee === 0 && treatmentZeroReason.trim()) {
+          updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+          updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${treatmentZeroReason.trim()}]`.trim();
+          setNotes(updatedNotes);
+        }
+
         const result = await saveConsultation(
           visitId, 
           { 
             reasonForVisit: reason || visit?.reasonForVisit || '', 
-            clinicalNotes: notes,
+            clinicalNotes: updatedNotes,
             consultationFee,
             treatmentFee
           }, 
@@ -789,16 +854,16 @@ export function DoctorWorkspacePage() {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to Queue
           </Button>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" onClick={() => setTreatmentModalOpen(true)} className="h-9 shadow-sm bg-white border-slate-200">
-              <Plus className="mr-2 h-4 w-4 text-emerald-600" /> Treatment Plan
+            <Button variant="outline" size="sm" onClick={() => setConsultationModalOpen(true)} className="h-9 shadow-sm bg-white border-slate-200">
+              <FileText className="mr-2 h-4 w-4 text-blue-600" /> Consultation
+            </Button>
+            <Button variant="outline" size="sm" aria-label="Treatment" onClick={() => { setTreatmentModalInitialEdit(false); setTreatmentModalOpen(true); }} className="h-9 shadow-sm bg-white border-slate-200">
+              <Plus className="mr-2 h-4 w-4 text-emerald-600" /> Treatment
               {treatmentPlan?.items?.filter((i: any) => i.status === 'Planned').length > 0 && (
                 <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                   {treatmentPlan.items.filter((i: any) => i.status === 'Planned').length} planned
                 </span>
               )}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setConsultationModalOpen(true)} className="h-9 shadow-sm bg-white border-slate-200">
-              <FileText className="mr-2 h-4 w-4 text-blue-600" /> Consultation
             </Button>
             <Button variant="outline" size="sm" onClick={() => setPrescriptionModalOpen(true)} className="h-9 shadow-sm bg-white border-slate-200">
               <Pill className="mr-2 h-4 w-4 text-indigo-600" /> Prescription
@@ -909,7 +974,7 @@ export function DoctorWorkspacePage() {
                     <Button variant="outline" size="sm" onClick={() => setViewTreatmentModalOpen(true)} className="h-8 px-3 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:text-emerald-800">
                       <Eye className="h-4 w-4 mr-1.5" /> View
                     </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setTreatmentModalOpen(true)} className="h-8 px-3 text-slate-700 bg-slate-100 hover:bg-slate-200 border-0">
+                    <Button variant="secondary" size="sm" onClick={() => { setTreatmentModalInitialEdit(true); setTreatmentModalOpen(true); }} className="h-8 px-3 text-slate-700 bg-slate-100 hover:bg-slate-200 border-0 cursor-pointer">
                       <Edit className="h-4 w-4 mr-1.5" /> Edit
                     </Button>
                   </div>
@@ -941,7 +1006,14 @@ export function DoctorWorkspacePage() {
                     </div>
                   </div>
                   <div className="pt-2 border-t border-slate-200/60">
-                    <div><strong className="text-slate-900">Treatment Fee:</strong> ₹{treatmentFee}</div>
+                    <div className="flex items-center flex-wrap gap-2">
+                      <div><strong className="text-slate-900">Treatment Fee:</strong> ₹{treatmentFee}</div>
+                      {treatmentFee === 0 && treatmentZeroReason && (
+                        <span className="text-[11px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                          Waiver Reason: {treatmentZeroReason}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -972,7 +1044,14 @@ export function DoctorWorkspacePage() {
                     <div className="whitespace-pre-wrap">{consultation.clinicalNotes}</div>
                   </div>
                   <div className="pt-2 border-t border-slate-200/60">
-                    <div><strong className="text-slate-900">Consultation Fee:</strong> ₹{consultation.consultationFee}</div>
+                    <div className="flex items-center flex-wrap gap-2">
+                      <div><strong className="text-slate-900">Consultation Fee:</strong> ₹{consultation.consultationFee}</div>
+                      {consultation.consultationFee === 0 && consultationZeroReason && (
+                        <span className="text-[11px] text-amber-800 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200 font-medium">
+                          Waiver Reason: {consultationZeroReason}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1046,7 +1125,7 @@ export function DoctorWorkspacePage() {
                   <Info className="w-6 h-6 text-slate-400" />
                 </div>
                 <p>No clinical records added yet for this visit.</p>
-                <p className="text-sm mt-1">Use the buttons above to add a Treatment Plan, Consultation, or Prescription.</p>
+                <p className="text-sm mt-1">Use the buttons above to add a Consultation, Treatment Plan, or Prescription.</p>
               </div>
             )}
 
@@ -1178,31 +1257,56 @@ export function DoctorWorkspacePage() {
 
         {/* Treatment Plan Modal */}
         <Dialog open={treatmentModalOpen} onOpenChange={setTreatmentModalOpen}>
-          <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto bg-slate-50 p-0 gap-0">
-            <DialogHeader className="p-6 pb-4 bg-white border-b border-slate-100">
-              <DialogTitle>Treatment Plan</DialogTitle>
+          <DialogContent className="max-w-7xl w-[96vw] max-h-[96vh] flex flex-col p-0 gap-0 bg-slate-50 overflow-hidden">
+            <DialogHeader className="px-5 py-2.5 bg-white border-b border-slate-100 shrink-0">
+              <DialogTitle className="text-base font-bold text-slate-800">Treatment Plan</DialogTitle>
             </DialogHeader>
-            <div className="p-6 pb-20">
+            <div className="p-3 sm:p-3.5 overflow-y-auto flex-1">
               <TreatmentPlanUI
                 patientId={patient.id}
-                currentVisitId={visitId!}
+                currentVisitId={effectiveVisitId!}
                 treatmentFee={treatmentFee}
-                onSaveTreatmentFee={async (newFee) => {
-                  setTreatmentFee(newFee)
-                  if (visitId) {
-                    await saveConsultation(visitId, {
-                      reasonForVisit: reason || visit?.reasonForVisit || '',
-                      clinicalNotes: notes,
+                initialTreatmentZeroReason={treatmentZeroReason}
+                initialEdit={treatmentModalInitialEdit}
+                onSaveTreatmentFee={async (newFee, zeroReason) => {
+                  setTreatmentFee(newFee);
+                  if (zeroReason !== undefined) setTreatmentZeroReason(zeroReason);
+                  const vId = effectiveVisitId || visit?.id;
+                  if (vId) {
+                    let updatedNotes = notes;
+                    updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+                    if (newFee === 0 && zeroReason) {
+                      updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${zeroReason.trim()}]`.trim();
+                      setNotes(updatedNotes);
+                    }
+                    await saveConsultation(vId, {
+                      reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
+                      clinicalNotes: updatedNotes,
                       consultationFee,
                       treatmentFee: newFee
-                    })
+                    });
                   }
+                }}
+                onDone={async () => {
+                  const vId = effectiveVisitId || visit?.id;
+                  if (vId) {
+                    let updatedNotes = notes;
+                    if (treatmentFee === 0 && treatmentZeroReason) {
+                      updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+                      updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${treatmentZeroReason.trim()}]`.trim();
+                      setNotes(updatedNotes);
+                    }
+                    await saveConsultation(vId, {
+                      reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
+                      clinicalNotes: updatedNotes,
+                      consultationFee,
+                      treatmentFee
+                    });
+                  }
+                  setTreatmentModalOpen(false);
                 }}
               />
             </div>
-            <DialogFooter className="p-4 bg-white border-t border-slate-100 absolute bottom-0 left-0 right-0">
-              <Button onClick={() => setTreatmentModalOpen(false)}>Done</Button>
-            </DialogFooter>
           </DialogContent>
         </Dialog>
 
@@ -1228,13 +1332,18 @@ export function DoctorWorkspacePage() {
 
                       return (
                         <div key={item.id} className="text-sm">
-                          <div className="font-semibold text-slate-900">
-                            {procedure} {variant}
-                            {category && <span className="text-xs font-medium text-slate-500 ml-2">({category})</span>}
+                          <div className="font-semibold text-slate-900 flex items-center gap-1.5 flex-wrap">
+                            {item.toothNumber && (
+                              <span className="text-xs bg-sky-100 text-sky-800 font-bold px-1.5 py-0.5 rounded">
+                                Tooth {item.toothNumber}
+                              </span>
+                            )}
+                            <span>{procedure} {variant}</span>
+                            {category && <span className="text-xs font-medium text-slate-500 ml-1">({category})</span>}
                           </div>
                           {notes && (
                             <div className="text-xs text-slate-600 mt-0.5">
-                              Tooth / Notes: <span className="font-medium text-slate-800">{notes}</span>
+                              Notes: <span className="font-medium text-slate-800">{notes}</span>
                             </div>
                           )}
                         </div>
@@ -1247,7 +1356,12 @@ export function DoctorWorkspacePage() {
               </div>
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
                 <span className="font-semibold text-slate-700">Treatment Fee:</span>
-                <span className="font-bold text-emerald-600 text-base">₹{treatmentFee}</span>
+                <div className="text-right">
+                  <span className="font-bold text-emerald-600 text-base">₹{treatmentFee}</span>
+                  {treatmentFee === 0 && treatmentZeroReason && (
+                    <div className="text-xs text-amber-700 font-medium">Reason: {treatmentZeroReason}</div>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -1280,7 +1394,12 @@ export function DoctorWorkspacePage() {
               </div>
               <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-sm">
                 <span className="font-semibold text-slate-700">Consultation Fee:</span>
-                <span className="font-bold text-slate-900 text-base">₹{consultationFee}</span>
+                <div className="text-right">
+                  <span className="font-bold text-slate-900 text-base">₹{consultationFee}</span>
+                  {consultationFee === 0 && consultationZeroReason && (
+                    <div className="text-xs text-amber-700 font-medium">Reason: {consultationZeroReason}</div>
+                  )}
+                </div>
               </div>
             </div>
             <DialogFooter>
@@ -1354,11 +1473,74 @@ export function DoctorWorkspacePage() {
                   onChange={e => setNotes(e.target.value)}
                 />
               </div>
-              <div className="border-t border-slate-100 pt-6">
-                <div className="space-y-3 max-w-xs">
+              <div className="border-t border-slate-100 pt-6 space-y-3">
+                <div className="space-y-2 max-w-xs">
                   <Label htmlFor="consultationFee" className="text-sm font-semibold text-slate-700">Consultation Fee (₹)</Label>
-                  <Input id="consultationFee" type="number" min="0" step="50" value={consultationFee} onChange={(e) => setConsultationFee(Number(e.target.value) || 0)} />
+                  <Input 
+                    id="consultationFee" 
+                    type="number" 
+                    min="0" 
+                    step="50" 
+                    value={consultationFee} 
+                    onChange={(e) => {
+                      const val = Number(e.target.value) || 0;
+                      setConsultationFee(val);
+                      if (val > 0) setConsultationZeroError('');
+                    }} 
+                  />
                 </div>
+
+                {consultationFee === 0 && (
+                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 max-w-lg">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        Reason for ₹0 Consultation Fee <span className="text-rose-600">*</span>
+                      </Label>
+                      <span className="text-[10px] text-slate-500">Required for waiver & audit records</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {[
+                        'Follow-up Visit',
+                        'Complimentary / Courtesy',
+                        'Post-Op Check',
+                        'Package / Camp Visit',
+                        'Staff / Family'
+                      ].map((tag) => (
+                        <button
+                          type="button"
+                          key={tag}
+                          onClick={() => {
+                            setConsultationZeroReason(tag);
+                            setConsultationZeroError('');
+                          }}
+                          className={`text-[11px] px-2.5 py-0.5 rounded-md border transition-all ${
+                            consultationZeroReason === tag
+                              ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-xs'
+                              : 'bg-white text-slate-600 border-amber-200 hover:bg-amber-100/60'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                    <Input
+                      placeholder="e.g. Free suture removal, 1-week follow-up, courtesy consultation..."
+                      value={consultationZeroReason}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setConsultationZeroReason(val);
+                        if (val.trim()) setConsultationZeroError('');
+                      }}
+                      className={`h-8 text-xs bg-white ${
+                        consultationZeroError ? 'border-rose-500 focus-visible:ring-rose-400' : 'border-slate-200'
+                      }`}
+                    />
+                    {consultationZeroError && (
+                      <p className="text-[11px] text-rose-600 font-semibold">{consultationZeroError}</p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <DialogFooter>
@@ -1587,11 +1769,21 @@ export function DoctorWorkspacePage() {
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>Consultation Fee:</span>
-                    <span className="font-semibold text-slate-900">₹{consultationFee || 0}</span>
+                    <div className="text-right">
+                      <span className="font-semibold text-slate-900">₹{consultationFee || 0}</span>
+                      {consultationFee === 0 && consultationZeroReason && (
+                        <div className="text-[10px] text-amber-700 font-medium">({consultationZeroReason})</div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex justify-between text-slate-600">
                     <span>Treatment Fee:</span>
-                    <span className="font-semibold text-slate-900">₹{treatmentFee || 0}</span>
+                    <div className="text-right">
+                      <span className="font-semibold text-slate-900">₹{treatmentFee || 0}</span>
+                      {treatmentFee === 0 && treatmentZeroReason && (
+                        <div className="text-[10px] text-amber-700 font-medium">({treatmentZeroReason})</div>
+                      )}
+                    </div>
                   </div>
                   {calculatedMedicineCost > 0 && (
                     <div className="flex justify-between text-slate-600">
@@ -1633,8 +1825,8 @@ export function DoctorWorkspacePage() {
               {/* Fee Breakdown Summary */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>Consulting: <strong className="text-slate-900">₹{consultationFee || 0}</strong></span>
-                  <span>Treatment: <strong className="text-slate-900">₹{treatmentFee || 0}</strong></span>
+                  <span>Consulting: <strong className="text-slate-900">₹{consultationFee || 0}</strong> {consultationFee === 0 && consultationZeroReason && <span className="text-[10px] text-amber-700 font-medium">({consultationZeroReason})</span>}</span>
+                  <span>Treatment: <strong className="text-slate-900">₹{treatmentFee || 0}</strong> {treatmentFee === 0 && treatmentZeroReason && <span className="text-[10px] text-amber-700 font-medium">({treatmentZeroReason})</span>}</span>
                   {calculatedMedicineCost > 0 && (
                     <span>Medicine: <strong className="text-slate-900">₹{calculatedMedicineCost}</strong></span>
                   )}

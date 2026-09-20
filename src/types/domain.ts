@@ -147,6 +147,7 @@ export interface TreatmentPlanItem {
   id: string
   treatmentPlanId: string
   treatmentCatalogId: string
+  toothNumber?: number | null
   status: 'Planned' | 'Completed'
   notes: string | null
   completedVisitId: string | null

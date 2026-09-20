@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { NavLink } from "react-router-dom"
-import { 
-  LayoutDashboard, Users, Calendar, Clock, 
+import {
+  LayoutDashboard, Users, Calendar, Clock,
   Package, Stethoscope, Settings, Receipt,
   LogOut, Menu, BarChart3, FolderArchive, FileText
 } from "lucide-react"
@@ -15,7 +15,7 @@ export type ClinicRole = 'head-doctor' | 'duty-doctor' | 'receptionist'
 interface NavItem {
   title: string
   href: string
-  icon: React.ElementType
+  icon: React.ComponentType<{ className?: string }>
   roles?: ClinicRole[]
 }
 
@@ -65,11 +65,11 @@ export function Sidebar({ className, onNavigate, isCollapsed = false, onToggleCo
       }
     }
   }, [])
-  
+
   // Filter navItems based on the current user's role and the centralized permission map
   const filteredNav = navItems.filter(item => {
     if (!currentUser) return false
-    
+
     // Phase 9: Hide modules that are merged into Reception Desk
     if (currentUser.role === 'Receptionist') {
       const hiddenForMerged = ['/appointments', '/queue', '/billing']
@@ -77,7 +77,7 @@ export function Sidebar({ className, onNavigate, isCollapsed = false, onToggleCo
         return false
       }
     }
-    
+
     // Head Doctor uses Reception Desk for Billing/Appointments
     if (currentUser.role === 'Head Doctor') {
       const hiddenForMerged = ['/appointments', '/billing']
@@ -85,7 +85,7 @@ export function Sidebar({ className, onNavigate, isCollapsed = false, onToggleCo
         return false
       }
     }
-    
+
     return canAccessRoute(currentUser.role, item.href, currentUser.permissions)
   })
 
@@ -102,7 +102,7 @@ export function Sidebar({ className, onNavigate, isCollapsed = false, onToggleCo
             )}
           />
         </div>
-        
+
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
@@ -116,8 +116,8 @@ export function Sidebar({ className, onNavigate, isCollapsed = false, onToggleCo
           </button>
         )}
       </div>
-      
-      <div 
+
+      <div
         onScroll={handleScroll}
         className={cn(
           "flex-1 overflow-y-auto py-5 px-3 space-y-1 sidebar-scrollbar",

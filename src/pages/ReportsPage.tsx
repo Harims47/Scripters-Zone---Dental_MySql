@@ -32,7 +32,7 @@ export type ReportTab =
   | 'inventory'
   | 'procurement'
 
-const TABS: { id: ReportTab; label: string; icon: React.ElementType }[] = [
+const TABS: { id: ReportTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'visits', label: 'Visits', icon: Calendar },
   { id: 'patients', label: 'Patients', icon: Users },
@@ -83,11 +83,10 @@ export function ReportsPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 font-semibold text-xs rounded-t-xl transition-all border-b-2 ${
-                  isActive
+                className={`flex items-center gap-2 px-4 py-3 font-semibold text-xs rounded-t-xl transition-all border-b-2 ${isActive
                     ? 'border-teal-600 text-teal-700 bg-teal-50/50'
                     : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-teal-600' : 'text-slate-400'}`} />
                 <span>{tab.label}</span>
