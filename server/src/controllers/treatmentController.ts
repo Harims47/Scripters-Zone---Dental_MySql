@@ -171,7 +171,8 @@ export const updateTreatmentPlanItem = async (req: Request, res: Response, next:
     const completedVisit = item.completedVisitId
       ? await prisma.visit.findUnique({ where: { id: item.completedVisitId } })
       : null;
-    const isLockedCompleted = item.status === 'Completed' && (!completedVisit || completedVisit.status === 'COMPLETED');
+    const isClosedHistoricalVisit = item.status === 'Completed' && completedVisit?.status === 'COMPLETED';
+    const isLockedCompleted = item.status === 'Completed' && (!completedVisit || isClosedHistoricalVisit);
 
     if (isLockedCompleted) {
       if (toothNumber !== undefined && toothNumber !== item.toothNumber) {
