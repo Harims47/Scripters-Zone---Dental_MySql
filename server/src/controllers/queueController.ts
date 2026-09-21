@@ -286,11 +286,22 @@ export const assignDoctor = async (req: Request, res: Response, next: NextFuncti
         throw new Error('Patient is not eligible for assignment');
       }
 
-      // Check if doctor is available
+      // Check if doctor is available for today (active patient concept resets each day at 12:00 AM)
+      const queueDate = queueEntry.createdAt ? new Date(queueEntry.createdAt) : new Date();
+      const startOfDay = new Date(queueDate);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(queueDate);
+      endOfDay.setHours(23, 59, 59, 999);
+
       const activePatient = await tx.queueEntry.findFirst({
         where: {
+          id: { not: id },
           assignedDoctorId: doctorId,
-          status: { in: ['In Progress', 'With Doctor'] }
+          status: { in: ['In Progress', 'With Doctor'] },
+          createdAt: { gte: startOfDay, lte: endOfDay },
+          visit: {
+            status: { notIn: ['CANCELLED', 'COMPLETED'] }
+          }
         }
       });
 
