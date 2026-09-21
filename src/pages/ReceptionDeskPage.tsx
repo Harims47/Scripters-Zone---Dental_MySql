@@ -1220,74 +1220,79 @@ export function ReceptionDeskPage() {
                 const activeQueue = queue.find(q => q.assignedDoctorId === doc.id && (q.status === 'In Progress' || q.status === 'With Doctor'));
                 const activePatient = activeQueue ? patients.find(p => p.id === activeQueue.patientId) : null;
 
-                const cardBg = isAvailable
-                  ? 'bg-gradient-to-br from-teal-700 via-teal-800 to-emerald-900 border-teal-600/40 text-white shadow-sm hover:shadow-md'
+                const bgClass = isAvailable
+                  ? 'bg-emerald-600 border-emerald-700'
                   : isLeave
-                  ? 'bg-slate-100 border-slate-200 text-slate-800 shadow-2xs'
-                  : 'bg-gradient-to-br from-rose-900 via-rose-950 to-slate-950 border-rose-700/40 text-white shadow-sm hover:shadow-md';
+                  ? 'bg-slate-200 border-slate-300'
+                  : 'bg-rose-600 border-rose-700';
 
-                const subtextClass = isLeave ? 'text-slate-500' : 'text-white/70';
+                const textClass = isLeave ? 'text-slate-700' : 'text-white';
+                const textSubClass = isLeave ? 'text-slate-600' : 'text-white/90';
+                const badgeClass = isLeave
+                  ? 'bg-slate-300 text-slate-700 border-slate-400'
+                  : 'bg-white/20 text-white border-white/20';
 
                 return (
                   <div
                     key={doc.id}
-                    className={`relative overflow-hidden rounded-2xl p-4 flex flex-col justify-between transition-all duration-200 border ${cardBg}`}
+                    className={`rounded-xl p-4 flex flex-col justify-between transition-all border shadow-md hover:shadow-lg overflow-hidden ${bgClass} ${isLeave ? 'opacity-80' : ''} ${isAvailable ? 'animate-pulse' : ''}`}
                   >
                     {/* Top Row: Room info & Status Badge */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className={`text-[11px] font-semibold tracking-wide px-2.5 py-0.5 rounded-full ${
-                        isLeave
-                          ? 'bg-slate-200 text-slate-700'
-                          : 'bg-white/10 text-white/90 border border-white/15'
-                      }`}>
+                      <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${badgeClass}`}>
                         Room {doc.roomNumber || '—'}
                       </span>
 
-                      {isAvailable ? (
-                        <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-400/20 text-emerald-100 border border-emerald-300/30 backdrop-blur-xs">
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+                      <Badge
+                        variant="outline"
+                        className={`shrink-0 shadow-sm border ${badgeClass}`}
+                      >
+                        {isAvailable ? (
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                            </span>
+                            Available
                           </span>
-                          Available
-                        </span>
-                      ) : isLeave ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 border border-slate-300">
-                          <XCircle className="w-3 h-3 text-slate-500" />
-                          Leave
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-rose-400/20 text-rose-100 border border-rose-300/30 backdrop-blur-xs">
-                          <Activity className="w-3 h-3 text-rose-300 animate-pulse" />
-                          With Patient
-                        </span>
-                      )}
+                        ) : isLeave ? (
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <XCircle className="w-3.5 h-3.5" />
+                            Leave
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1.5 font-medium">
+                            <Activity className="w-3.5 h-3.5 animate-pulse" />
+                            With Patient
+                          </span>
+                        )}
+                      </Badge>
                     </div>
 
                     {/* Middle: Doctor Information */}
                     <div className="min-w-0">
-                      <h3 className={`font-bold text-base tracking-tight leading-snug break-words ${isLeave ? 'text-slate-900' : 'text-white'}`} title={doc.name}>
+                      <h3 className={`font-bold text-lg leading-tight break-words ${textClass}`} title={doc.name}>
                         {doc.name}
                       </h3>
-                      <p className={`text-xs mt-0.5 font-medium ${subtextClass}`}>
+                      <p className={`font-bold text-sm mt-0.5 ${textSubClass}`}>
                         {doc.role}
                       </p>
                     </div>
 
                     {/* Bottom: Context indicator */}
                     <div className={`mt-3 pt-2.5 border-t text-xs flex items-center justify-between ${
-                      isLeave ? 'border-slate-200 text-slate-500' : 'border-white/10 text-white/80'
+                      isLeave ? 'border-slate-300 text-slate-600' : 'border-white/20 text-white/90'
                     }`}>
                       {isAvailable ? (
-                        <span className="text-[11px] text-emerald-200/90 font-medium flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Ready for next patient
+                        <span className="text-xs font-medium flex items-center gap-1">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Ready for next patient
                         </span>
                       ) : isLeave ? (
-                        <span className="text-[11px] text-slate-400">Not in clinic today</span>
+                        <span className="text-xs text-slate-500">Not in clinic today</span>
                       ) : (
                         <div className="flex items-center justify-between w-full min-w-0 gap-1.5">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-rose-200/70 shrink-0">In Room:</span>
-                          <span className="text-xs font-semibold text-white truncate text-right">
+                          <span className="text-xs font-bold uppercase tracking-wider text-white/80 shrink-0">In Room:</span>
+                          <span className="text-xs font-bold text-white truncate text-right">
                             {activePatient?.name || 'In Consultation'}
                           </span>
                         </div>
