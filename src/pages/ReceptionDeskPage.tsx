@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Users, Receipt, CheckCircle, Search, Calendar, CheckCircle2, Pencil, Eye, Send, CreditCard, Activity, XCircle, Camera, AlertTriangle, ArrowRightLeft, FileText } from 'lucide-react';
+import { Users, Receipt, CheckCircle, Search, Calendar, CheckCircle2, Pencil, Eye, Send, CreditCard, Activity, XCircle, Camera, AlertTriangle, ArrowRightLeft, FileText, Tag } from 'lucide-react';
 import { useClinicContext } from '../context/ClinicContext';
 import { soundService } from '../lib/soundUtils';
 import { api } from '../lib/api';
@@ -144,8 +144,8 @@ export function ReceptionDeskPage() {
       if (doc.attendance === 'Leave') {
         availability[doc.id] = 'Leave';
       } else {
-        // A doctor is with a patient if they have ANY queue entry In Progress
-        const hasActive = queue.some(q => q.assignedDoctorId === doc.id && q.status === 'In Progress');
+        // A doctor is with a patient if they have ANY queue entry In Progress or With Doctor
+        const hasActive = queue.some(q => q.assignedDoctorId === doc.id && (q.status === 'In Progress' || q.status === 'With Doctor'));
         availability[doc.id] = hasActive ? 'With Patient' : 'Available';
       }
     });
@@ -588,10 +588,13 @@ export function ReceptionDeskPage() {
               onClick={async (e) => {
                 e.preventDefault(); e.stopPropagation();
                 let patient = patients.find(p => p.id === row.original.patientId) || row.original.rawVisit?.patient || (row.original.rawQueue as any)?.visit?.patient;
-                if (!patient && row.original.patientId) {
+                if (row.original.patientId) {
                   try {
                     const res = await api.get<any>(`/api/patients/${row.original.patientId}`);
-                    patient = res?.data || res;
+                    const freshPatient = (res as any)?.data || res;
+                    if (freshPatient?.id) {
+                      patient = freshPatient;
+                    }
                   } catch (err) {
                     console.error('Failed to fetch patient for edit', err);
                   }
@@ -631,10 +634,13 @@ export function ReceptionDeskPage() {
               onClick={async (e) => {
                 e.preventDefault(); e.stopPropagation();
                 let patient = patients.find(p => p.id === row.original.patientId) || row.original.rawVisit?.patient || (row.original.rawQueue as any)?.visit?.patient;
-                if (!patient && row.original.patientId) {
+                if (row.original.patientId) {
                   try {
                     const res = await api.get<any>(`/api/patients/${row.original.patientId}`);
-                    patient = res?.data || res;
+                    const freshPatient = (res as any)?.data || res;
+                    if (freshPatient?.id) {
+                      patient = freshPatient;
+                    }
                   } catch (err) {
                     console.error('Failed to fetch patient for view', err);
                   }
@@ -1013,9 +1019,12 @@ export function ReceptionDeskPage() {
 
     const visitPayments = payments.filter(p => p.visitId === processVisitId);
     const totalPaid = visitPayments.reduce((sum, p) => sum + p.amount, 0);
-    const calculatedDue = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
-    const amountDue = calculatedDue > 0 ? calculatedDue : (activeProcessVisit?.amountDue || 0);
-    const balance = amountDue - totalPaid;
+    const subtotal = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
+    const activeConsultation = consultations.find(c => c.visitId === processVisitId);
+    const discountMatch = activeConsultation?.clinicalNotes?.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+    const discount = discountMatch ? parseFloat(discountMatch[1]) : Math.max(0, subtotal - (activeProcessVisit?.amountDue ?? subtotal));
+    const amountDue = Math.max(0, subtotal - discount);
+    const balance = Math.max(0, amountDue - totalPaid);
 
     if (amt > balance) {
       toast.error(`Payment amount cannot exceed remaining balance (₹${balance})`);
@@ -2147,11 +2156,15 @@ export function ReceptionDeskPage() {
               const hasCompletedDispensing = dispensings.some(d => d.visitId === processVisitId);
               const isDispensingStep = hasPrescription && !hasCompletedDispensing;
 
+              const activeConsultation = consultations.find(c => c.visitId === processVisitId);
               const visitPayments = payments.filter(p => p.visitId === processVisitId);
               const totalPaid = visitPayments.reduce((sum, p) => sum + p.amount, 0);
-              const calculatedDue = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
-              const amountDue = calculatedDue > 0 ? calculatedDue : (activeProcessVisit?.amountDue || 0);
-              const balance = amountDue - totalPaid;
+              const subtotal = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
+              const discountMatch = activeConsultation?.clinicalNotes?.match(/\[Doctor Discount:\s*₹?([0-9.]+)(?:\s*\|\s*Reason:\s*([^\]]*))?\]/i);
+              const discount = discountMatch ? parseFloat(discountMatch[1]) : Math.max(0, subtotal - (activeProcessVisit?.amountDue ?? subtotal));
+              const discountReason = discountMatch ? discountMatch[2]?.trim() : '';
+              const amountDue = Math.max(0, subtotal - discount);
+              const balance = Math.max(0, amountDue - totalPaid);
 
               const hasCompletedPayment = isDoctorHandled || activeProcessVisit?.status === 'COMPLETED' || (balance <= 0 && (!hasPrescription || hasCompletedDispensing));
               // Only a step if dispensing is done AND balance is still > 0
@@ -2160,7 +2173,6 @@ export function ReceptionDeskPage() {
               const isWorkflowCompleted = isDoctorHandled
                 ? (!hasPrescription || hasCompletedDispensing)
                 : (activeProcessVisit?.status === 'COMPLETED' || ((!hasPrescription || hasCompletedDispensing) && balance <= 0));
-              const activeConsultation = consultations.find(c => c.visitId === processVisitId);
 
               return (
                 <>
@@ -2442,9 +2454,25 @@ export function ReceptionDeskPage() {
                                 <span>Medicine Cost</span>
                                 <span className="font-medium text-slate-800">₹{activeProcessVisit?.medicineCost || 0}</span>
                               </div>
+                              {discount > 0 && (
+                                <div className="flex justify-between items-center bg-emerald-50/90 text-emerald-800 p-2.5 rounded-lg border border-emerald-200 shadow-2xs">
+                                  <div>
+                                    <div className="font-semibold flex items-center gap-1.5 text-xs">
+                                      <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                                      Doctor Discount / Concession
+                                    </div>
+                                    {discountReason && (
+                                      <div className="text-[11px] text-emerald-700 font-medium">
+                                        Reason: {discountReason}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <span className="font-bold text-sm text-emerald-700">-₹{discount}</span>
+                                </div>
+                              )}
                               <div className="pt-2 border-t border-slate-100 flex justify-between font-semibold text-slate-900 text-sm">
                                 <span>Total Due</span>
-                                <span>₹{amountDue}</span>
+                                <span className={discount > 0 ? "text-indigo-600 font-bold" : ""}>₹{amountDue}</span>
                               </div>
                               <div className="flex justify-between font-semibold text-emerald-600 text-sm">
                                 <span>Total Paid</span>
@@ -2624,9 +2652,12 @@ export function ReceptionDeskPage() {
               const isDoctorHandled = activeProcessVisit?.paymentOwner === 'DOCTOR';
               const visitPayments = payments.filter(p => p.visitId === processVisitId);
               const totalPaid = visitPayments.reduce((sum, p) => sum + p.amount, 0);
-              const calculatedDue = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
-              const amountDue = calculatedDue > 0 ? calculatedDue : (activeProcessVisit?.amountDue || 0);
-              const balance = amountDue - totalPaid;
+              const subtotal = (activeProcessVisit?.consultationFee || 0) + (activeProcessVisit?.treatmentFee || 0) + (activeProcessVisit?.medicineCost || 0);
+              const activeConsultation = consultations.find(c => c.visitId === processVisitId);
+              const discountMatch = activeConsultation?.clinicalNotes?.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+              const discount = discountMatch ? parseFloat(discountMatch[1]) : Math.max(0, subtotal - (activeProcessVisit?.amountDue ?? subtotal));
+              const amountDue = Math.max(0, subtotal - discount);
+              const balance = Math.max(0, amountDue - totalPaid);
               const hasPrescription = prescriptions.some(p => p.visitId === processVisitId && p.status === 'Finalized');
               const hasCompletedDispensing = dispensings.some(d => d.visitId === processVisitId);
 
@@ -2705,3 +2736,4 @@ export function ReceptionDeskPage() {
     </div>
   );
 }
+

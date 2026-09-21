@@ -594,9 +594,107 @@ export const exportVisits = async (req: Request, res: Response, next: NextFuncti
       res.header('Content-Type', 'application/pdf');
       res.attachment('reception_desk_export.pdf');
       return res.send(pdf);
-    } else {
-      return res.status(400).json({ error: 'Invalid export format' });
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const applyDoctorDiscount = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const id = req.params.id as string;
+    const { discountAmount, discountReason } = req.body;
+    const userRole = (req as any).user?.role;
+    const userStaffId = (req as any).user?.staffId;
+
+    const visit = await prisma.visit.findUnique({
+      where: { id },
+      include: {
+        consultation: true,
+        prescription: { include: { items: true } },
+        payments: true,
+        queueEntry: true
+      }
+    });
+
+    if (!visit) {
+      return res.status(404).json({ error: 'Visit not found' });
+    }
+
+    if (visit.status === 'COMPLETED') {
+      return res.status(409).json({ error: 'Cannot apply discount to a completed and closed visit' });
+    }
+
+    if (userRole === 'Duty Doctor' && visit.doctorId && visit.doctorId !== userStaffId) {
+      return res.status(403).json({ error: 'You are not authorized to discount another doctor\'s visit' });
+    }
+
+    // Compute medicine cost accurately
+    let medCost = visit.medicineCost || 0;
+    if (medCost === 0 && visit.prescription?.items?.length) {
+      const medIds = visit.prescription.items.map((i: any) => i.medicineId);
+      const meds = await prisma.medicine.findMany({ where: { id: { in: medIds } } });
+      medCost = visit.prescription.items.reduce((sum: number, item: any) => {
+        const m = meds.find(med => med.id === item.medicineId);
+        return sum + (item.quantity * (m?.unitPrice || 0));
+      }, 0);
+    }
+
+    const subtotal = (visit.consultationFee || 0) + (visit.treatmentFee || 0) + medCost;
+
+    if (discountAmount < 0) {
+      return res.status(400).json({ error: 'Discount amount cannot be negative' });
+    }
+
+    if (discountAmount > subtotal) {
+      return res.status(400).json({
+        error: `Discount amount (₹${discountAmount}) cannot exceed total charges (₹${subtotal})`
+      });
+    }
+
+    const newAmountDue = Math.max(0, subtotal - discountAmount);
+    const reasonText = (discountReason || '').trim() || 'Patient requested reduction';
+
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Update Visit amountDue and medicineCost
+      const updatedVisit = await tx.visit.update({
+        where: { id },
+        data: {
+          amountDue: newAmountDue,
+          medicineCost: medCost
+        },
+        include: {
+          consultation: true,
+          queueEntry: true,
+          payments: true,
+          prescription: { include: { items: true } }
+        }
+      });
+
+      // 2. If Consultation exists, update clinicalNotes with standard discount tag
+      if (visit.consultation) {
+        let notes = visit.consultation.clinicalNotes || '';
+        // Remove existing discount tag if present
+        notes = notes.replace(/\n?\[Doctor Discount:[^\]]*\]/gi, '').trim();
+        if (discountAmount > 0) {
+          notes = `${notes}\n[Doctor Discount: ₹${discountAmount} | Reason: ${reasonText}]`.trim();
+        }
+        await tx.consultation.update({
+          where: { id: visit.consultation.id },
+          data: { clinicalNotes: notes }
+        });
+      }
+
+      return updatedVisit;
+    });
+
+    return res.json({
+      success: true,
+      visit: result,
+      discountAmount,
+      discountReason: reasonText,
+      newAmountDue
+    });
   } catch (error) {
     next(error);
   }

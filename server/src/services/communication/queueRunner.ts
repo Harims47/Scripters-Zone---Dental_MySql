@@ -82,40 +82,50 @@ export class QueueRunner {
    * Claims and processes a batch of notifications atomically using MySQL FOR UPDATE SKIP LOCKED.
    */
   public static async processBatch(batchSize: number = 5): Promise<number> {
-    const claimedNotifications = await prisma.$transaction(async (tx) => {
-      // 1. Atomically lock candidate IDs using FOR UPDATE SKIP LOCKED
-      const candidates = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM \`Notification\`
-        WHERE \`scheduledAt\` <= NOW()
-          AND status IN ('QUEUED', 'RETRYING')
-        ORDER BY \`scheduledAt\` ASC
-        LIMIT ${batchSize}
-        FOR UPDATE SKIP LOCKED
-      `;
+    console.log(`[Diagnostic] QueueRunner cycle start (batchSize: ${batchSize})`);
+    let claimedNotifications: any[] = [];
+    try {
+      console.log('[Diagnostic] QueueRunner transaction start');
+      claimedNotifications = await prisma.$transaction(async (tx) => {
+        // 1. Atomically lock candidate IDs using FOR UPDATE SKIP LOCKED
+        const candidates = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM \`Notification\`
+          WHERE \`scheduledAt\` <= NOW()
+            AND status IN ('QUEUED', 'RETRYING')
+          ORDER BY \`scheduledAt\` ASC
+          LIMIT ${batchSize}
+          FOR UPDATE SKIP LOCKED
+        `;
 
-      if (!candidates || candidates.length === 0) {
-        return [];
-      }
+        if (!candidates || candidates.length === 0) {
+          return [];
+        }
 
-      const ids = candidates.map(c => c.id);
+        const ids = candidates.map(c => c.id);
 
-      // 2. Transition strictly the locked IDs to SENDING
-      await tx.notification.updateMany({
-        where: { id: { in: ids } },
-        data: {
-          status: 'SENDING',
-          updatedAt: new Date(),
-        },
+        // 2. Transition strictly the locked IDs to SENDING
+        await tx.notification.updateMany({
+          where: { id: { in: ids } },
+          data: {
+            status: 'SENDING',
+            updatedAt: new Date(),
+          },
+        });
+
+        // 3. Fetch the updated claimed records before transaction commit
+        return tx.notification.findMany({
+          where: { id: { in: ids } },
+        });
       });
-
-      // 3. Fetch the updated claimed records before transaction commit
-      return tx.notification.findMany({
-        where: { id: { in: ids } },
-      });
-    });
+      console.log(`[Diagnostic] QueueRunner transaction completed successfully (claimed: ${claimedNotifications.length})`);
+    } catch (txErr: any) {
+      console.error('[Diagnostic] QueueRunner transaction failure:', txErr.message);
+      throw txErr;
+    }
 
     // 4. Commit has occurred — dispatch completely outside the database transaction
     if (!claimedNotifications || claimedNotifications.length === 0) {
+      console.log('[Diagnostic] QueueRunner cycle complete (0 jobs processed)');
       return 0;
     }
 
@@ -125,6 +135,7 @@ export class QueueRunner {
       await this.dispatchNotification(notification);
     }
 
+    console.log(`[Diagnostic] QueueRunner cycle complete (${claimedNotifications.length} jobs dispatched)`);
     return claimedNotifications.length;
   }
 

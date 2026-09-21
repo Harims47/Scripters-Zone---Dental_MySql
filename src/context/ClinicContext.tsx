@@ -41,9 +41,9 @@ interface ClinicContextType {
   saveConsultation: (visitId: string, data: { reasonForVisit: string, clinicalNotes: string, consultationFee?: number, treatmentFee?: number }, isComplete?: boolean, paymentOwner?: 'RECEPTION' | 'DOCTOR') => Promise<{ success: boolean, error?: string }>
   savePrescription: (prescription: Omit<Prescription, 'id'>) => Promise<{ success: boolean, error?: string }>
 
-  // Phase 0P.5
   completeDispensing: (visitId: string, prescriptionId: string, items: { medicineId: string, prescribedQuantity: number, dispensedQuantity: number }[]) => Promise<{ success: boolean, error?: string }>
   recordPayment: (visitId: string, amount: number, method: 'Cash' | 'GPay' | 'Credit Card' | 'Debit Card', notes?: string, isFinalPayment?: boolean) => Promise<{ success: boolean, error?: string }>
+  applyDoctorDiscount: (visitId: string, discountAmount: number, discountReason: string) => Promise<{ success: boolean, error?: string, data?: any }>
   adjustMedicineStock: (id: string, adjustment: number | { quantity: number, type: 'ADD' | 'SUBTRACT', reason: string }, defaultReason?: string) => Promise<{ success: boolean, error?: string, medicine?: Medicine }>
 }
 
@@ -576,6 +576,24 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const applyDoctorDiscount = async (visitId: string, discountAmount: number, discountReason: string) => {
+    try {
+      const res = await api.post<{ success: boolean, visit: Visit, discountAmount: number, discountReason: string, newAmountDue: number }>(`/api/visits/${visitId}/doctor-discount`, {
+        discountAmount,
+        discountReason
+      });
+      const data = (res as any).data || res;
+      if (data.visit) {
+        setVisits(prev => prev.map(v => v.id === visitId ? { ...v, amountDue: data.newAmountDue } : v));
+      }
+      await refreshClinicOperations();
+      return { success: true, data };
+    } catch (err: any) {
+      console.error(err);
+      return { success: false, error: err.response?.data?.error || err.message || 'Failed to apply discount' };
+    }
+  };
+
   return (
     <ClinicContext.Provider value={{
       patients, appointments, visits, queue, consultations, prescriptions, dispensings, payments, medicines,
@@ -583,7 +601,7 @@ export function ClinicProvider({ children }: { children: React.ReactNode }) {
       addPatient, updatePatient, addAppointment, updateAppointment, confirmAppointmentArrival, startVisit, updateVisit, cancelVisit, transferVisitsToNextDay,
         assignDoctor,
         normalizePhone,
-        callPatient, startConsultationFlow, saveConsultation, savePrescription, completeDispensing, recordPayment, adjustMedicineStock
+        callPatient, startConsultationFlow, saveConsultation, savePrescription, completeDispensing, recordPayment, applyDoctorDiscount, adjustMedicineStock
     }}>
       {children}
     </ClinicContext.Provider>

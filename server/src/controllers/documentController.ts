@@ -152,11 +152,15 @@ export const getReceiptPDF = async (req: Request, res: Response) => {
     }
     const medicineCost = visit.medicineCost ?? calculatedMedicineCost;
     const grossTotal = consultationFee + treatmentFee + medicineCost;
+    const notes = visit.consultation?.clinicalNotes || '';
+    const discountMatch = notes.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+    const discount = discountMatch ? parseFloat(discountMatch[1]) : Math.max(0, grossTotal - (visit.amountDue ?? grossTotal));
+    const effectiveTotal = Math.max(0, grossTotal - discount);
 
     // Prior payments made before this installment
     const priorPaid = validPayments.slice(0, paymentIndex).reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
     const cumulativePaid = priorPaid + payment.amount;
-    const balanceDue = Math.max(0, grossTotal - cumulativePaid);
+    const balanceDue = Math.max(0, effectiveTotal - cumulativePaid);
     const isPartial = balanceDue > 0;
 
     const branding = getClinicBranding();
@@ -175,7 +179,7 @@ export const getReceiptPDF = async (req: Request, res: Response) => {
       consultationFee,
       treatmentFee,
       medicineCost,
-      totalAmount: grossTotal > 0 ? grossTotal : payment.amount,
+      totalAmount: effectiveTotal > 0 ? effectiveTotal : payment.amount,
       amountPaid: payment.amount,
       priorPaid,
       cumulativePaid,

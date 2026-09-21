@@ -10,7 +10,10 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:backup": "tsx scripts/backup.ts",
-    "db:restore:verify": "tsx scripts/restore.ts"
+    "db:restore:verify": "tsx scripts/restore.ts",
+    "bootstrap:head-doctor": "tsx scripts/bootstrap_head_doctor.ts",
+    "seed:treatment-catalog": "tsx scripts/seed_treatment_catalog.ts",
+    "seed:inventory": "tsx scripts/simulate_inventory.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

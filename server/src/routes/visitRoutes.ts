@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, requireRole } from '../middleware/authMiddleware';
 import { validateRequest } from '../middleware/validateRequest';
-import { startWalkInVisitSchema, checkInAppointmentSchema, updateVisitSchema, transferVisitsSchema } from '../schemas/visitSchema';
+import { startWalkInVisitSchema, checkInAppointmentSchema, updateVisitSchema, transferVisitsSchema, applyDoctorDiscountSchema } from '../schemas/visitSchema';
 import {
   getVisits,
   getVisitById,
@@ -10,7 +10,8 @@ import {
   cancelVisit,
   updateVisit,
   exportVisits,
-  transferVisits
+  transferVisits,
+  applyDoctorDiscount
 } from '../controllers/visitController';
 
 const router = Router();
@@ -20,6 +21,9 @@ router.use(requireAuth);
 router.get('/export', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), exportVisits);
 router.get('/', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getVisits);
 router.get('/:id', requireRole('Head Doctor', 'Duty Doctor', 'Receptionist'), getVisitById);
+
+// Apply doctor-authorized discount (Head Doctor, Duty Doctor only)
+router.post('/:id/doctor-discount', requireRole('Head Doctor', 'Duty Doctor'), validateRequest(applyDoctorDiscountSchema), applyDoctorDiscount);
 
 // Transfer visits to next day
 router.post('/transfer', requireRole('Head Doctor', 'Receptionist'), validateRequest(transferVisitsSchema), transferVisits);

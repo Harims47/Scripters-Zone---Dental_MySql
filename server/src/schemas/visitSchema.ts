@@ -34,3 +34,11 @@ export const transferVisitsSchema = z.object({
   })
 });
 
+export const applyDoctorDiscountSchema = z.object({
+  body: z.object({
+    discountAmount: z.number().min(0, 'Discount amount cannot be negative'),
+    discountReason: z.string().optional()
+  })
+});
+
+

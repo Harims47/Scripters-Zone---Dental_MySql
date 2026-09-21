@@ -80,7 +80,8 @@ export const createPayment = async (req: Request, res: Response, next: NextFunct
           patient: true, 
           payments: true, 
           prescription: { include: { items: true } },
-          dispensing: true 
+          dispensing: true,
+          consultation: true
         }
       });
 
@@ -114,7 +115,11 @@ export const createPayment = async (req: Request, res: Response, next: NextFunct
           return sum + (item.quantity * (m?.unitPrice || 0));
         }, 0);
         if (medCost > 0) {
-          expectedAmount = (visit.consultationFee || 0) + (visit.treatmentFee || 0) + medCost;
+          const grossAmount = (visit.consultationFee || 0) + (visit.treatmentFee || 0) + medCost;
+          const notes = visit.consultation?.clinicalNotes || '';
+          const discountMatch = notes.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+          const discount = discountMatch ? parseFloat(discountMatch[1]) : 0;
+          expectedAmount = Math.max(0, grossAmount - discount);
           await tx.visit.update({
             where: { id: visit.id },
             data: { medicineCost: medCost, amountDue: expectedAmount }

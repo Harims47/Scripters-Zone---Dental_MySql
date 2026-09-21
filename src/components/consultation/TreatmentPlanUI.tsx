@@ -16,6 +16,14 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter
+} from '../ui/dialog';
 import { api } from '../../lib/api';
 import type { TreatmentPlan, TreatmentCatalog, TreatmentPlanItem } from '../../types/domain';
 import { FdiToothChart } from './FdiToothChart';
@@ -45,6 +53,15 @@ export function TreatmentPlanUI({
   const [localTreatmentFee, setLocalTreatmentFee] = useState<number>(treatmentFee || 0);
   const [treatmentZeroReason, setTreatmentZeroReason] = useState<string>(initialTreatmentZeroReason || '');
   const [treatmentZeroError, setTreatmentZeroError] = useState<string>('');
+  const [isZeroFeeModalOpen, setIsZeroFeeModalOpen] = useState<boolean>(false);
+
+  const ZERO_FEE_REASONS = [
+    'Follow-up / Review',
+    'Included in Package',
+    'Warranty / Revision',
+    'Complimentary / Courtesy',
+    'Observation Only'
+  ];
 
   // Tooth Selection state
   const [selectedTeeth, setSelectedTeeth] = useState<number[]>([]);
@@ -742,20 +759,22 @@ export function TreatmentPlanUI({
                 onChange={(e) => {
                   const val = Number(e.target.value) || 0;
                   setLocalTreatmentFee(val);
-                  if (val > 0) setTreatmentZeroError('');
-                  if (onSaveTreatmentFee) onSaveTreatmentFee(val, treatmentZeroReason);
+                  if (val > 0) {
+                    setTreatmentZeroError('');
+                    if (onSaveTreatmentFee) onSaveTreatmentFee(val, '');
+                  }
                 }}
               />
             </div>
             {onDone && (
               <Button
-                className="h-8 px-5 text-xs font-bold"
+                className="h-8 px-5 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={async () => {
-                  if (localTreatmentFee === 0 && !treatmentZeroReason.trim()) {
-                    setTreatmentZeroError('Please provide a reason for ₹0 treatment fee.');
+                  if (localTreatmentFee === 0) {
+                    setIsZeroFeeModalOpen(true);
                     return;
                   }
-                  if (onSaveTreatmentFee) await onSaveTreatmentFee(localTreatmentFee, treatmentZeroReason);
+                  if (onSaveTreatmentFee) await onSaveTreatmentFee(localTreatmentFee, '');
                   if (onDone) onDone();
                 }}
               >
@@ -764,62 +783,103 @@ export function TreatmentPlanUI({
             )}
           </div>
         </div>
-
-        {/* Reason for ₹0 Treatment Fee (required when fee is 0) */}
-        {localTreatmentFee === 0 && (
-          <div className="pt-2 border-t border-slate-200/70 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold text-amber-800 flex items-center gap-1.5">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                Reason for ₹0 Treatment Fee <span className="text-rose-600">*</span>
-              </label>
-              <span className="text-[10px] text-slate-500">Required for waiver & audit records</span>
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {[
-                'Follow-up / Review',
-                'Included in Package',
-                'Warranty / Revision',
-                'Complimentary / Courtesy',
-                'Observation Only'
-              ].map((tag) => (
-                <button
-                  type="button"
-                  key={tag}
-                  onClick={() => {
-                    setTreatmentZeroReason(tag);
-                    setTreatmentZeroError('');
-                    if (onSaveTreatmentFee) onSaveTreatmentFee(localTreatmentFee, tag);
-                  }}
-                  className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
-                    treatmentZeroReason === tag
-                      ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-xs'
-                      : 'bg-white text-slate-600 border-amber-200 hover:bg-amber-100/60'
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
-            </div>
-            <Input
-              placeholder="Enter reason for ₹0 treatment fee (e.g. Free checkup, warranty adjustment, package follow-up)..."
-              value={treatmentZeroReason}
-              onChange={(e) => {
-                const val = e.target.value;
-                setTreatmentZeroReason(val);
-                if (val.trim()) setTreatmentZeroError('');
-                if (onSaveTreatmentFee) onSaveTreatmentFee(localTreatmentFee, val);
-              }}
-              className={`h-7 text-xs bg-white ${
-                treatmentZeroError ? 'border-rose-500 focus-visible:ring-rose-400' : 'border-slate-200'
-              }`}
-            />
-            {treatmentZeroError && (
-              <p className="text-[10px] text-rose-600 font-semibold">{treatmentZeroError}</p>
-            )}
-          </div>
-        )}
       </div>
+
+      {/* Modal for ₹0 Treatment Fee Reason (opens only when Done is clicked with ₹0) */}
+      <Dialog open={isZeroFeeModalOpen} onOpenChange={setIsZeroFeeModalOpen}>
+        <DialogContent className="max-w-md w-full p-5 gap-3.5 bg-white rounded-2xl shadow-xl">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700">
+                <AlertCircle className="w-4 h-4" />
+              </span>
+              Reason for ₹0 Treatment Fee
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-500">
+              Please specify why no treatment fee is charged for this visit. Required for clinical audit and fee waiver records.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 py-1">
+            {/* Quick Tags */}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                Select Reason Tag
+              </label>
+              <div className="flex flex-wrap gap-1.5">
+                {ZERO_FEE_REASONS.map((tag) => (
+                  <button
+                    type="button"
+                    key={tag}
+                    onClick={() => {
+                      setTreatmentZeroReason(tag);
+                      setTreatmentZeroError('');
+                    }}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                      treatmentZeroReason === tag
+                        ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                    }`}
+                  >
+                    {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Detailed Reason Text Box */}
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Reason Details / Notes <span className="text-rose-500">*</span>
+              </label>
+              <Textarea
+                placeholder="Enter reason for ₹0 treatment fee (e.g. Free checkup, warranty adjustment, package follow-up)..."
+                value={treatmentZeroReason}
+                onChange={(e) => {
+                  setTreatmentZeroReason(e.target.value);
+                  if (e.target.value.trim()) setTreatmentZeroError('');
+                }}
+                rows={3}
+                className={`text-xs bg-white resize-none ${
+                  treatmentZeroError ? 'border-rose-500 focus-visible:ring-rose-400' : 'border-slate-200'
+                }`}
+              />
+              {treatmentZeroError && (
+                <p className="text-[11px] text-rose-600 font-medium mt-1">{treatmentZeroError}</p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => {
+                setTreatmentZeroError('');
+                setIsZeroFeeModalOpen(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white"
+              onClick={async () => {
+                if (!treatmentZeroReason.trim()) {
+                  setTreatmentZeroError('Please select or provide a reason for ₹0 treatment fee.');
+                  return;
+                }
+                setIsZeroFeeModalOpen(false);
+                if (onSaveTreatmentFee) await onSaveTreatmentFee(0, treatmentZeroReason.trim());
+                if (onDone) onDone();
+              }}
+            >
+              Confirm & Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

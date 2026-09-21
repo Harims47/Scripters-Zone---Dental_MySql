@@ -200,7 +200,11 @@ export const completeConsultation = async (req: Request, res: Response, next: Ne
           return sum + (item.quantity * (m?.unitPrice || 0));
         }, 0);
       }
-      const finalAmountDue = (visit.consultationFee || 0) + (visit.treatmentFee || 0) + medCost;
+      const grossAmountDue = (visit.consultationFee || 0) + (visit.treatmentFee || 0) + medCost;
+      const notes = visit.consultation?.clinicalNotes || '';
+      const discountMatch = notes.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+      const discount = discountMatch ? parseFloat(discountMatch[1]) : 0;
+      const finalAmountDue = Math.max(0, grossAmountDue - discount);
 
       // 4. Transition Visit atomically with paymentOwner, medicineCost, and amountDue
       const updatedVisit = await tx.visit.update({

@@ -211,7 +211,7 @@ function AnatomicalCrown({
 export function FdiToothChart({
   selectedTeeth,
   onToggleTooth,
-  plannedTeeth = [],
+  plannedTeeth: _plannedTeeth = [],
   completedTeeth = [],
   readOnly = false
 }: FdiToothChartProps) {
@@ -255,10 +255,6 @@ export function FdiToothChart({
 
             <filter id="selectedGlow" x="-40%" y="-40%" width="180%" height="180%">
               <feDropShadow dx="0" dy="0" stdDeviation="3.5" floodColor="#0ea5e9" floodOpacity="0.75" />
-            </filter>
-
-            <filter id="pillGlow" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="1" stdDeviation="2" floodColor="#0d9488" floodOpacity="0.35" />
             </filter>
 
             <linearGradient id="enamelBaseGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -365,7 +361,6 @@ export function FdiToothChart({
             const { fdi, x, y, rot, lx, ly } = item;
             const info = TOOTH_METADATA[fdi];
             const isSelected = selectedTeeth.includes(fdi);
-            const hasPlanned = plannedTeeth.includes(fdi);
             const hasCompleted = completedTeeth.includes(fdi);
             const isHovered = hoveredTooth === fdi;
 
@@ -408,18 +403,6 @@ export function FdiToothChart({
                     </g>
                   )}
 
-                  {hasPlanned && (
-                    <circle
-                      cx="0"
-                      cy="0"
-                      r="3.5"
-                      fill="#f59e0b"
-                      stroke="#ffffff"
-                      strokeWidth="1.5"
-                      className="animate-pulse"
-                    />
-                  )}
-
                   {hasCompleted && (
                     <circle
                       cx="0"
@@ -438,67 +421,25 @@ export function FdiToothChart({
                   onMouseLeave={() => setHoveredTooth(null)}
                   className={readOnly ? 'cursor-default' : 'cursor-pointer'}
                 >
-                  {isSelected ? (
-                    <g filter="url(#pillGlow)">
-                      <rect
-                        x={lx - 14}
-                        y={ly - 9}
-                        width="28"
-                        height="18"
-                        rx="9"
-                        fill="#0d9488"
-                        stroke="#14b8a6"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={lx}
-                        y={ly + 3.5}
-                        textAnchor="middle"
-                        fill="#ffffff"
-                        fontSize="10.5"
-                        fontWeight="800"
-                        className="select-none pointer-events-none font-sans"
-                      >
-                        {fdi}
-                      </text>
-                    </g>
-                  ) : isHovered ? (
-                    <g>
-                      <rect
-                        x={lx - 12}
-                        y={ly - 8}
-                        width="24"
-                        height="16"
-                        rx="8"
-                        fill="#e0f2fe"
-                        stroke="#38bdf8"
-                        strokeWidth="1"
-                      />
-                      <text
-                        x={lx}
-                        y={ly + 3.5}
-                        textAnchor="middle"
-                        fill="#0369a1"
-                        fontSize="10.5"
-                        fontWeight="700"
-                        className="select-none pointer-events-none font-sans"
-                      >
-                        {fdi}
-                      </text>
-                    </g>
-                  ) : (
-                    <text
-                      x={lx}
-                      y={ly + 4}
-                      textAnchor="middle"
-                      fill={hasCompleted ? '#047857' : hasPlanned ? '#b45309' : '#334155'}
-                      fontSize="10.5"
-                      fontWeight={hasCompleted || hasPlanned ? '700' : '600'}
-                      className="select-none pointer-events-none font-sans"
-                    >
-                      {fdi}
-                    </text>
-                  )}
+                  <text
+                    x={lx}
+                    y={ly + 4}
+                    textAnchor="middle"
+                    fill={
+                      isSelected
+                        ? '#0284c7'
+                        : isHovered
+                        ? '#0ea5e9'
+                        : hasCompleted
+                        ? '#047857'
+                        : '#334155'
+                    }
+                    fontSize="10.5"
+                    fontWeight={isSelected ? '800' : hasCompleted ? '700' : '600'}
+                    className="select-none pointer-events-none font-sans"
+                  >
+                    {fdi}
+                  </text>
                 </g>
               </Fragment>
             );
@@ -529,9 +470,6 @@ export function FdiToothChart({
         <div className="flex items-center gap-2.5 text-[9.5px] text-slate-500 shrink-0">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-teal-600"></span> Selected
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-500"></span> Planned
           </span>
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Completed

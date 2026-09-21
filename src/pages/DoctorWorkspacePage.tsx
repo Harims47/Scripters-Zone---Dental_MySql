@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, CheckCircle2, Search, Info, Edit, Eye, FileText, Pill, Plus, Minus, Trash2, GripVertical, Printer, History, Clock, CreditCard, AlertCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Search, Info, Edit, Eye, FileText, Pill, Plus, Minus, Trash2, GripVertical, History, Clock, CreditCard, AlertCircle } from 'lucide-react'
 import { DndContext, MouseSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core'
 import type { DragEndEvent } from '@dnd-kit/core'
 
@@ -22,7 +22,7 @@ import type { Medicine } from '../lib/mock-data'
 import { WhatsAppActionButton } from '../components/communication/WhatsAppActionButton'
 
 import { useClinicContext } from '../context/ClinicContext'
-import { api, API_BASE_URL } from '../lib/api'
+import { api } from '../lib/api'
 import { cn } from '../lib/utils'
 import Swal from 'sweetalert2'
 import withReactContent from 'sweetalert2-react-content'
@@ -415,6 +415,14 @@ export function DoctorWorkspacePage() {
   const [consultationFee, setConsultationFee] = useState<number>(500)
   const [consultationZeroReason, setConsultationZeroReason] = useState<string>('')
   const [consultationZeroError, setConsultationZeroError] = useState<string>('')
+  const [isZeroConsultationFeeModalOpen, setIsZeroConsultationFeeModalOpen] = useState<boolean>(false)
+  const ZERO_CONSULTATION_REASONS = [
+    'Follow-up Visit',
+    'Complimentary / Courtesy',
+    'Post-Op Check',
+    'Package / Camp Visit',
+    'Staff / Family'
+  ]
   const [treatmentFee, setTreatmentFee] = useState<number>(0)
   const [treatmentZeroReason, setTreatmentZeroReason] = useState<string>('')
 
@@ -496,10 +504,23 @@ export function DoctorWorkspacePage() {
     return visitPayments.reduce((sum: number, p: any) => sum + p.amount, 0);
   }, [visitPayments]);
 
+  const doctorDiscount = useMemo(() => {
+    const notes = consultation?.clinicalNotes || '';
+    const discountMatch = notes.match(/\[Doctor Discount:\s*₹?([0-9.]+)/i);
+    if (discountMatch) return parseFloat(discountMatch[1]);
+    if (visit && visit.amountDue !== undefined && totalCalculatedDue > visit.amountDue) {
+      return totalCalculatedDue - visit.amountDue;
+    }
+    return 0;
+  }, [consultation?.clinicalNotes, visit?.amountDue, totalCalculatedDue]);
+
+  const effectiveDue = useMemo(() => {
+    return Math.max(0, totalCalculatedDue - doctorDiscount);
+  }, [totalCalculatedDue, doctorDiscount]);
+
   const remainingBalance = useMemo(() => {
-    const effectiveDue = totalCalculatedDue > 0 ? totalCalculatedDue : (visit?.amountDue || 0);
     return Math.max(0, effectiveDue - totalPaid);
-  }, [totalCalculatedDue, visit?.amountDue, totalPaid]);
+  }, [effectiveDue, totalPaid]);
 
 
   useEffect(() => {
@@ -532,22 +553,6 @@ export function DoctorWorkspacePage() {
     }
   }, [prescription, medicines])
 
-  const handlePrintPrescription = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/documents/prescription/${visitId}`, {
-        method: 'GET',
-        credentials: 'include'
-      });
-      if (!response.ok) throw new Error('Failed to generate prescription');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      setTimeout(() => window.URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const rxSensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 100, tolerance: 5 } }),
@@ -569,12 +574,7 @@ export function DoctorWorkspacePage() {
   const patientType = hasPastCompletedVisit ? 'Existing Patient' : 'New Patient'
 
   // --- Handlers ---
-  const handleSaveConsultation = async () => {
-    if (consultationFee === 0 && !consultationZeroReason.trim()) {
-      setConsultationZeroError('Please provide a reason for ₹0 consultation fee.');
-      return;
-    }
-
+  const executeSaveConsultation = async () => {
     if (visitId) {
       let updatedNotes = notes;
       updatedNotes = updatedNotes.replace(/\n?\[Consultation Fee Waiver Reason:[^\]]*\]/gi, '').trim();
@@ -596,6 +596,14 @@ export function DoctorWorkspacePage() {
       });
       setConsultationModalOpen(false);
     }
+  };
+
+  const handleSaveConsultation = async () => {
+    if (consultationFee === 0 && !consultationZeroReason.trim()) {
+      setIsZeroConsultationFeeModalOpen(true);
+      return;
+    }
+    await executeSaveConsultation();
   };
 
   const handleSavePrescription = async () => {
@@ -635,7 +643,7 @@ export function DoctorWorkspacePage() {
     if (visitId) {
       if (consultationFee === 0 && !consultationZeroReason.trim()) {
         setConsultationZeroError('Please provide a reason for ₹0 consultation fee.');
-        setConsultationModalOpen(true);
+        setIsZeroConsultationFeeModalOpen(true);
         return;
       }
       if (treatmentFee === 0 && currentVisitTreatments.length > 0 && !treatmentZeroReason.trim()) {
@@ -1070,22 +1078,6 @@ export function DoctorWorkspacePage() {
                     <Button variant="secondary" size="sm" onClick={() => setPrescriptionModalOpen(true)} className="h-8 px-3 text-slate-700 bg-slate-100 hover:bg-slate-200 border-0">
                       <Edit className="h-4 w-4 mr-1.5" /> Edit
                     </Button>
-                    <Button variant="outline" size="sm" onClick={handlePrintPrescription} className="h-8 px-3 text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
-                      <Printer className="h-4 w-4 mr-1.5" /> Print
-                    </Button>
-                    <WhatsAppActionButton
-                      type="PRESCRIPTION"
-                      entityType="VISIT"
-                      entityId={visit.id}
-                      patientId={patient.id}
-                      recipientName={patient.name}
-                      recipientPhone={patient.phone}
-                      preferredCommunicationChannel={patient.preferredCommunicationChannel}
-                      whatsappAvailable={patient.whatsappAvailable}
-                      variant="outline"
-                      size="sm"
-                      className="h-8 px-3"
-                    />
                   </div>
                 </div>
                 <div className="bg-slate-50/50 rounded-lg p-4 border border-slate-100">
@@ -1489,63 +1481,106 @@ export function DoctorWorkspacePage() {
                     }} 
                   />
                 </div>
-
-                {consultationFee === 0 && (
-                  <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2 max-w-lg">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold text-amber-800 flex items-center gap-1.5">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                        Reason for ₹0 Consultation Fee <span className="text-rose-600">*</span>
-                      </Label>
-                      <span className="text-[10px] text-slate-500">Required for waiver & audit records</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1">
-                      {[
-                        'Follow-up Visit',
-                        'Complimentary / Courtesy',
-                        'Post-Op Check',
-                        'Package / Camp Visit',
-                        'Staff / Family'
-                      ].map((tag) => (
-                        <button
-                          type="button"
-                          key={tag}
-                          onClick={() => {
-                            setConsultationZeroReason(tag);
-                            setConsultationZeroError('');
-                          }}
-                          className={`text-[11px] px-2.5 py-0.5 rounded-md border transition-all ${
-                            consultationZeroReason === tag
-                              ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-xs'
-                              : 'bg-white text-slate-600 border-amber-200 hover:bg-amber-100/60'
-                          }`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
-                    </div>
-                    <Input
-                      placeholder="e.g. Free suture removal, 1-week follow-up, courtesy consultation..."
-                      value={consultationZeroReason}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setConsultationZeroReason(val);
-                        if (val.trim()) setConsultationZeroError('');
-                      }}
-                      className={`h-8 text-xs bg-white ${
-                        consultationZeroError ? 'border-rose-500 focus-visible:ring-rose-400' : 'border-slate-200'
-                      }`}
-                    />
-                    {consultationZeroError && (
-                      <p className="text-[11px] text-rose-600 font-semibold">{consultationZeroError}</p>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConsultationModalOpen(false)}>Cancel</Button>
-              <Button onClick={handleSaveConsultation}>Save Consultation</Button>
+              <Button className="bg-teal-600 hover:bg-teal-700 text-white font-semibold" onClick={handleSaveConsultation}>Save Consultation</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal for ₹0 Consultation Fee Reason */}
+        <Dialog open={isZeroConsultationFeeModalOpen} onOpenChange={setIsZeroConsultationFeeModalOpen}>
+          <DialogContent className="max-w-md w-full p-5 gap-3.5 bg-white rounded-2xl shadow-xl">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700">
+                  <AlertCircle className="w-4 h-4" />
+                </span>
+                Reason for ₹0 Consultation Fee
+              </DialogTitle>
+              <DialogDescription className="text-xs text-slate-500">
+                Please specify why no consultation fee is charged for this visit. Required for clinical audit and fee waiver records.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3.5 py-1">
+              {/* Quick Tags */}
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                  Select Reason Tag
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {ZERO_CONSULTATION_REASONS.map((tag) => (
+                    <button
+                      type="button"
+                      key={tag}
+                      onClick={() => {
+                        setConsultationZeroReason(tag);
+                        setConsultationZeroError('');
+                      }}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition-all ${
+                        consultationZeroReason === tag
+                          ? 'bg-amber-600 text-white border-amber-600 font-semibold shadow-xs'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-amber-50 hover:border-amber-300'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Detailed Reason Text Box */}
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Reason Details / Notes <span className="text-rose-500">*</span>
+                </Label>
+                <Textarea
+                  placeholder="Enter reason for ₹0 consultation fee (e.g. Free suture removal, 1-week follow-up, courtesy consultation)..."
+                  value={consultationZeroReason}
+                  onChange={(e) => {
+                    setConsultationZeroReason(e.target.value);
+                    if (e.target.value.trim()) setConsultationZeroError('');
+                  }}
+                  rows={3}
+                  className={`text-xs bg-white resize-none ${
+                    consultationZeroError ? 'border-rose-500 focus-visible:ring-rose-400' : 'border-slate-200'
+                  }`}
+                />
+                {consultationZeroError && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1">{consultationZeroError}</p>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t border-slate-100">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setConsultationZeroError('');
+                  setIsZeroConsultationFeeModalOpen(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white"
+                onClick={async () => {
+                  if (!consultationZeroReason.trim()) {
+                    setConsultationZeroError('Please select or provide a reason for ₹0 consultation fee.');
+                    return;
+                  }
+                  setIsZeroConsultationFeeModalOpen(false);
+                  await executeSaveConsultation();
+                }}
+              >
+                Confirm & Save
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -1678,26 +1713,8 @@ export function DoctorWorkspacePage() {
                 </table>
               </div>
             </div>
-            <DialogFooter className="flex sm:justify-between items-center gap-2">
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={handlePrintPrescription} className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700">
-                  <Printer className="h-4 w-4 mr-1.5" /> Print Prescription
-                </Button>
-                <WhatsAppActionButton
-                  type="PRESCRIPTION"
-                  entityType="VISIT"
-                  entityId={visit.id}
-                  patientId={patient.id}
-                  recipientName={patient.name}
-                  recipientPhone={patient.phone}
-                  preferredCommunicationChannel={patient.preferredCommunicationChannel}
-                  whatsappAvailable={patient.whatsappAvailable}
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-3"
-                />
-              </div>
-              <Button onClick={() => setViewPrescriptionModalOpen(false)}>Close</Button>
+            <DialogFooter className="flex justify-end">
+              <Button className="bg-teal-600 hover:bg-teal-700 text-white font-medium" onClick={() => setViewPrescriptionModalOpen(false)}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

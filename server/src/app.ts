@@ -138,9 +138,8 @@ process.on('unhandledRejection', (reason: any) => {
 
 const server = app.listen(Number(port), '0.0.0.0', () => {
   logger.info(`Server is running on port ${port}`, { port });
-  QueueRunner.start().catch((err) => {
-    logger.error('Failed to start communication QueueRunner', { error: err.message });
-  });
+  // [Diagnostic] QueueRunner startup temporarily disabled for diagnostic investigation
+  logger.info('[Diagnostic] QueueRunner startup is temporarily DISABLED for diagnostic investigation');
   HistoricalBatchService.recoverStaleMigrationJobs().catch((err) => {
     logger.error('Failed to recover stale historical migration jobs', { error: err.message });
   });
