@@ -95,6 +95,14 @@ export function TreatmentPlanUI({
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
+      setPlan(null);
+      setSelectedTeeth([]);
+      setSelectedCategory('');
+      setSelectedProcedure('');
+      setNotes('');
+      setEditingItem(null);
+      setErrorMsg(null);
       try {
         const [catRes, planRes] = await Promise.all([
           api.get<any>('/api/treatments/catalog'),

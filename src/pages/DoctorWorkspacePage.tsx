@@ -1254,50 +1254,53 @@ export function DoctorWorkspacePage() {
               <DialogTitle className="text-base font-bold text-slate-800">Treatment Plan</DialogTitle>
             </DialogHeader>
             <div className="p-3 sm:p-3.5 overflow-y-auto flex-1">
-              <TreatmentPlanUI
-                patientId={patient.id}
-                currentVisitId={effectiveVisitId!}
-                treatmentFee={treatmentFee}
-                initialTreatmentZeroReason={treatmentZeroReason}
-                initialEdit={treatmentModalInitialEdit}
-                onSaveTreatmentFee={async (newFee, zeroReason) => {
-                  setTreatmentFee(newFee);
-                  if (zeroReason !== undefined) setTreatmentZeroReason(zeroReason);
-                  const vId = effectiveVisitId || visit?.id;
-                  if (vId) {
-                    let updatedNotes = notes;
-                    updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
-                    if (newFee === 0 && zeroReason) {
-                      updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${zeroReason.trim()}]`.trim();
-                      setNotes(updatedNotes);
-                    }
-                    await saveConsultation(vId, {
-                      reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
-                      clinicalNotes: updatedNotes,
-                      consultationFee,
-                      treatmentFee: newFee
-                    });
-                  }
-                }}
-                onDone={async () => {
-                  const vId = effectiveVisitId || visit?.id;
-                  if (vId) {
-                    let updatedNotes = notes;
-                    if (treatmentFee === 0 && treatmentZeroReason) {
+              {treatmentModalOpen && (
+                <TreatmentPlanUI
+                  key={`${patient.id}-${effectiveVisitId || 'no-visit'}`}
+                  patientId={patient.id}
+                  currentVisitId={effectiveVisitId!}
+                  treatmentFee={treatmentFee}
+                  initialTreatmentZeroReason={treatmentZeroReason}
+                  initialEdit={treatmentModalInitialEdit}
+                  onSaveTreatmentFee={async (newFee, zeroReason) => {
+                    setTreatmentFee(newFee);
+                    if (zeroReason !== undefined) setTreatmentZeroReason(zeroReason);
+                    const vId = effectiveVisitId || visit?.id;
+                    if (vId) {
+                      let updatedNotes = notes;
                       updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
-                      updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${treatmentZeroReason.trim()}]`.trim();
-                      setNotes(updatedNotes);
+                      if (newFee === 0 && zeroReason) {
+                        updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${zeroReason.trim()}]`.trim();
+                        setNotes(updatedNotes);
+                      }
+                      await saveConsultation(vId, {
+                        reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
+                        clinicalNotes: updatedNotes,
+                        consultationFee,
+                        treatmentFee: newFee
+                      });
                     }
-                    await saveConsultation(vId, {
-                      reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
-                      clinicalNotes: updatedNotes,
-                      consultationFee,
-                      treatmentFee
-                    });
-                  }
-                  setTreatmentModalOpen(false);
-                }}
-              />
+                  }}
+                  onDone={async () => {
+                    const vId = effectiveVisitId || visit?.id;
+                    if (vId) {
+                      let updatedNotes = notes;
+                      if (treatmentFee === 0 && treatmentZeroReason) {
+                        updatedNotes = updatedNotes.replace(/\n?\[Treatment Fee Waiver Reason:[^\]]*\]/gi, '').trim();
+                        updatedNotes = `${updatedNotes}\n[Treatment Fee Waiver Reason: ${treatmentZeroReason.trim()}]`.trim();
+                        setNotes(updatedNotes);
+                      }
+                      await saveConsultation(vId, {
+                        reasonForVisit: reason || visit?.reasonForVisit || 'Consultation',
+                        clinicalNotes: updatedNotes,
+                        consultationFee,
+                        treatmentFee
+                      });
+                    }
+                    setTreatmentModalOpen(false);
+                  }}
+                />
+              )}
             </div>
           </DialogContent>
         </Dialog>
