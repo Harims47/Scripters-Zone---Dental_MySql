@@ -50,7 +50,10 @@ export function TreatmentPlanUI({
   const [catalog, setCatalog] = useState<TreatmentCatalog[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [localTreatmentFee, setLocalTreatmentFee] = useState<number>(treatmentFee || 0);
+  const [localTreatmentFee, setLocalTreatmentFee] = useState<string>(
+    treatmentFee !== undefined ? String(treatmentFee) : '0'
+  );
+  const [isFeeFocused, setIsFeeFocused] = useState<boolean>(false);
   const [treatmentZeroReason, setTreatmentZeroReason] = useState<string>(initialTreatmentZeroReason || '');
   const [treatmentZeroError, setTreatmentZeroError] = useState<string>('');
   const [isZeroFeeModalOpen, setIsZeroFeeModalOpen] = useState<boolean>(false);
@@ -79,10 +82,10 @@ export function TreatmentPlanUI({
   const [showPastHistory, setShowPastHistory] = useState(false);
 
   useEffect(() => {
-    if (treatmentFee !== undefined) {
-      setLocalTreatmentFee(treatmentFee);
+    if (treatmentFee !== undefined && !isFeeFocused) {
+      setLocalTreatmentFee(String(treatmentFee));
     }
-  }, [treatmentFee]);
+  }, [treatmentFee, isFeeFocused]);
 
   useEffect(() => {
     if (initialTreatmentZeroReason !== undefined) {
@@ -756,12 +759,21 @@ export function TreatmentPlanUI({
                 step="50"
                 className="pl-6 h-8 text-xs bg-white font-semibold text-slate-900"
                 value={localTreatmentFee}
+                onFocus={() => setIsFeeFocused(true)}
+                onBlur={() => {
+                  setIsFeeFocused(false);
+                  if (localTreatmentFee === '' || isNaN(Number(localTreatmentFee))) {
+                    setLocalTreatmentFee('0');
+                  } else {
+                    const normalized = Number(localTreatmentFee);
+                    setLocalTreatmentFee(String(normalized));
+                  }
+                }}
                 onChange={(e) => {
-                  const val = Number(e.target.value) || 0;
+                  const val = e.target.value;
                   setLocalTreatmentFee(val);
-                  if (val > 0) {
+                  if (Number(val) > 0) {
                     setTreatmentZeroError('');
-                    if (onSaveTreatmentFee) onSaveTreatmentFee(val, '');
                   }
                 }}
               />
@@ -770,11 +782,12 @@ export function TreatmentPlanUI({
               <Button
                 className="h-8 px-5 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white"
                 onClick={async () => {
-                  if (localTreatmentFee === 0) {
+                  const feeNum = Number(localTreatmentFee) || 0;
+                  if (feeNum === 0) {
                     setIsZeroFeeModalOpen(true);
                     return;
                   }
-                  if (onSaveTreatmentFee) await onSaveTreatmentFee(localTreatmentFee, '');
+                  if (onSaveTreatmentFee) await onSaveTreatmentFee(feeNum, '');
                   if (onDone) onDone();
                 }}
               >
