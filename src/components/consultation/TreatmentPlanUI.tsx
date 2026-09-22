@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Textarea } from '../ui/textarea';
@@ -53,7 +53,7 @@ export function TreatmentPlanUI({
   const [localTreatmentFee, setLocalTreatmentFee] = useState<string>(
     treatmentFee !== undefined ? String(treatmentFee) : '0'
   );
-  const [isFeeFocused, setIsFeeFocused] = useState<boolean>(false);
+  const lastPropFee = useRef<number | undefined>(treatmentFee);
   const [treatmentZeroReason, setTreatmentZeroReason] = useState<string>(initialTreatmentZeroReason || '');
   const [treatmentZeroError, setTreatmentZeroError] = useState<string>('');
   const [isZeroFeeModalOpen, setIsZeroFeeModalOpen] = useState<boolean>(false);
@@ -82,10 +82,11 @@ export function TreatmentPlanUI({
   const [showPastHistory, setShowPastHistory] = useState(false);
 
   useEffect(() => {
-    if (treatmentFee !== undefined && !isFeeFocused) {
+    if (treatmentFee !== undefined && treatmentFee !== lastPropFee.current) {
+      lastPropFee.current = treatmentFee;
       setLocalTreatmentFee(String(treatmentFee));
     }
-  }, [treatmentFee, isFeeFocused]);
+  }, [treatmentFee]);
 
   useEffect(() => {
     if (initialTreatmentZeroReason !== undefined) {
@@ -767,14 +768,15 @@ export function TreatmentPlanUI({
                 step="50"
                 className="pl-6 h-8 text-xs bg-white font-semibold text-slate-900"
                 value={localTreatmentFee}
-                onFocus={() => setIsFeeFocused(true)}
                 onBlur={() => {
-                  setIsFeeFocused(false);
-                  if (localTreatmentFee === '' || isNaN(Number(localTreatmentFee))) {
-                    setLocalTreatmentFee('0');
-                  } else {
-                    const normalized = Number(localTreatmentFee);
-                    setLocalTreatmentFee(String(normalized));
+                  let num = Number(localTreatmentFee);
+                  if (localTreatmentFee === '' || isNaN(num) || num < 0) {
+                    num = 0;
+                  }
+                  setLocalTreatmentFee(String(num));
+                  lastPropFee.current = num;
+                  if (onSaveTreatmentFee) {
+                    onSaveTreatmentFee(num, num === 0 ? treatmentZeroReason : '');
                   }
                 }}
                 onChange={(e) => {
